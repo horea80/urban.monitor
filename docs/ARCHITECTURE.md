@@ -23,14 +23,18 @@ crates/core/               urban-core — server-only
   tests/fixtures/          HTML și PDF reale, salvate 2026-09-20
 
 crates/app/                urban-app — Dioxus fullstack
-  src/ui/                  pagini `/` și `/sedinte/{id}`
-  src/server_fns.rs        funcții #[server]
-  src/api/                 /api/v1, extractor Caller, OpenAPI (utoipa)
-  src/auth.rs              strat de autentificare (identitate în v1)
-  src/jobs.rs              sync periodic
-  src/main.rs              pornire axum + Dioxus
+  src/main.rs              alege: server (feature `server`) sau hidratare în browser (feature `web`)
+  src/server.rs            pornire axum + Dioxus SSR, /healthz, montare API, job de sync
+  src/state.rs             starea procesului (config, bază), setată o dată la pornire
+  src/query.rs             SearchParams: starea căutării în query string, parsată și din formularul clasic
+  src/ui/                  rute și pagini `/`, `/sedinte`, `/sedinte/{id}`, componente
+  src/server_fns.rs        funcții #[server] apelate de UI
+  src/api/                 /api/v1 (utoipa-axum), OpenAPI la /api/v1/openapi.json, Scalar la /api/docs
+  src/auth.rs              Caller (identitate în v1) și RateKey, cheia limitării de rată
+  src/jobs.rs              sincronizare periodică, secvențială
+  assets/main.css          stilurile, incluse prin asset!()
 
-deploy/                    Dockerfile, Caddyfile, docker-compose.yml
+deploy/                    setup.sh (provizionare), deploy.sh, deploy-env.sh, urban.service, urban.caddy
 .github/workflows/ci.yml   fmt, clippy, test, check wasm și server
 ```
 

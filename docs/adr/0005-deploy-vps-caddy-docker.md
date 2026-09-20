@@ -1,10 +1,13 @@
 ---
-status: accepted
+status: superseded by ADR-0008
 date: 2026-09-20
 decision-makers: horea
 ---
 
 # ADR-0005: Deploy pe VPS propriu, Docker, Caddy
+
+> Înlocuit pe 2026-09-21 de [ADR-0008](0008-deploy-fara-docker-systemd-caddy.md): fără Docker,
+> binar sub systemd, build pe serverul ARM. Opțiunea „binar + systemd” nu fusese luată în calcul aici.
 
 ## Context și problemă
 

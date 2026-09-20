@@ -11,6 +11,7 @@ dioxus = { workspace = true, features = ["router", "fullstack"] }
 urban-shared = { path = "../shared" }
 serde = { workspace = true }
 chrono = { workspace = true }
+form_urlencoded = { workspace = true }
 
 # server-only, activate prin feature `server`
 urban-core = { path = "../core", optional = true }

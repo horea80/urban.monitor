@@ -1,0 +1,26 @@
+# /etc/caddy/sites/urban.caddy — site-ul urban.monitor. Caddyfile-ul principal importă /etc/caddy/sites/*.
+# Înlocuiește domeniul. Fără linia `tls`, Caddy obține și reînnoiește singur certificatul (Let's Encrypt).
+# Dacă domeniul stă în spatele Cloudflare cu certificat de origine, ca la celelalte site-uri de pe box:
+#     tls /etc/caddy/certs/urban.pem /etc/caddy/certs/urban.key
+
+urban.example.ro {
+    reverse_proxy 127.0.0.1:8081
+
+    encode zstd gzip
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        # 'unsafe-inline': Dioxus injectează scripturi inline pentru hidratare (window.dx_hydrate,
+        # initial_dioxus_hydration_data). 'wasm-unsafe-eval': WebAssembly. cdn.jsdelivr.net: Scalar (/api/docs).
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; font-src 'self' https://cdn.jsdelivr.net; connect-src 'self'; frame-ancestors 'none'"
+        -Server
+    }
+
+    log {
+        output file /var/log/caddy/urban.log
+        format json
+    }
+}

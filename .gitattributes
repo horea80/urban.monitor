@@ -1,0 +1,24 @@
+# Terminații de linie: LF peste tot, în repo ȘI în working tree (aceeași politică ca în oracle.gsl).
+# `text=auto` lasă git să detecteze text vs binar; `eol=lf` impune LF la checkout, altfel un checkout
+# pe Windows produce copii CRLF, iar scripturile din deploy/ nu mai rulează pe Linux.
+# După adăugare, o singură dată: `git add --renormalize . && git commit`.
+* text=auto eol=lf
+
+# Scripturile Windows rămân CRLF (niciunul azi; păstrat ca un viitor .bat să nu se strice).
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binare: neatinse.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
+*.db binary
+*.gz binary
+*.zip binary
+*.wasm binary

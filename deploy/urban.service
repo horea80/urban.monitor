@@ -1,0 +1,32 @@
+[Unit]
+Description=urban.monitor — ședințele CTATU Cluj-Napoca
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=urban
+Group=urban
+WorkingDirectory=/opt/urban
+# public/ (wasm, css, index.html) stă lângă binar: serverul îl caută la <exe_dir>/public
+ExecStart=/opt/urban/server
+Restart=always
+RestartSec=5
+EnvironmentFile=/opt/urban/.env
+
+# Loguri în journal: journalctl -u urban -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=urban
+
+# Întărire, ca la celelalte servicii de pe box. PrivateTmp e obligatoriu: fără el, cu
+# ProtectSystem=strict nu rămâne niciun director temporar scriibil și SQLite moare cu
+# SQLITE_IOERR_GETTEMPPATH la prima interogare care are nevoie de un fișier temporar.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/urban/data
+PrivateTmp=true
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

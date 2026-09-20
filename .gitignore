@@ -5,6 +5,8 @@
 **/*.db-wal
 **/*.db-shm
 .env
+.env.*
+!.env.example
 .venv/
 __pycache__/
 *.log

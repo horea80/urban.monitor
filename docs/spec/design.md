@@ -19,7 +19,8 @@ pregătirea pentru autentificare fără rescriere.
 - SQLite ca singur depozit ([ADR-0003](../adr/0003-sqlite-rusqlite-fts5.md)).
 - Sursa nu oferă API sau RSS; singura cale e HTML plus PDF, cu structură WordPress/Avada.
 - Găzduire pe VPS propriu, în spatele Caddy ([ADR-0005](../adr/0005-deploy-vps-caddy-docker.md)).
-- Dezvoltare pe Windows, livrare pe Linux: build-ul de producție se face în Docker sau CI.
+- Dezvoltare pe Windows x86-64, livrare pe Linux aarch64 (Oracle ARM): build-ul de producție se face
+  pe server ([ADR-0008](../adr/0008-deploy-fara-docker-systemd-caddy.md)). Fără Docker.
 
 ## 3. Context
 
@@ -57,12 +58,15 @@ crates/core          urban-core        scrape/client.rs    reqwest, rate limit, 
                                        db/                 migrații, upsert, căutare FTS5, sync_runs
                                        sync.rs             orchestrare
                                        bin/urban.rs        CLI
-crates/app           urban-app         ui/                 pagini `/`, `/sedinte/{id}`, componente
+crates/app           urban-app         main.rs             server (feature `server`) sau hidratare (feature `web`)
+                                       server.rs           axum + Dioxus SSR, /healthz, API montat, job de sync, config din env
+                                       state.rs            config + bază, OnceLock setat la pornire
+                                       query.rs            SearchParams ↔ query string; formular clasic și linkuri
+                                       ui/                 rute `/`, `/sedinte`, `/sedinte/{id}`, componente
                                        server_fns.rs       funcții #[server] apelate de UI
-                                       api/                rute /api/v1, extractor Caller, OpenAPI
-                                       auth.rs             strat identitate; loc pentru chei API
-                                       jobs.rs             task periodic de sync, lock single-flight
-                                       main.rs             axum + Dioxus, config din env
+                                       api/                rute /api/v1 (utoipa-axum), extractor Caller, OpenAPI, Scalar
+                                       auth.rs             Caller (identitate în v1) și RateKey; loc pentru chei API
+                                       jobs.rs             task periodic de sync, strict secvențial
 ```
 
 Regula de dependență: `app → core → shared`; `shared` nu depinde de nimic din proiect.
@@ -97,9 +101,12 @@ token devine `token*`, tokenii sunt legați cu AND; filtrele pe categorie și an
 
 ## 7. Deploy
 
-Docker multi-stage: builder cu `dx bundle --release --platform web`; runtime `debian-slim`
-cu binarul `server` și directorul `public/`. Volum pe `/data`. Caddy în față pentru TLS,
-compresie și headere de securitate. `docker compose up -d` pe VPS. Detalii în `deploy/`.
+Fără Docker ([ADR-0008](../adr/0008-deploy-fara-docker-systemd-caddy.md)). `deploy/deploy.sh` trimite
+sursa pe VPS prin `tar | ssh`, rulează acolo `dx bundle --release --platform web` (box-ul e aarch64) și
+instalează atomic `server` + `public/` în `/opt/urban`, sub unitatea systemd `urban` (utilizator
+dedicat, `ProtectSystem=strict`, `ReadWritePaths=/opt/urban/data`, `PrivateTmp`). Configurația vine din
+`/opt/urban/.env`. Caddy, instalat din apt, face TLS, compresie și headerele de securitate, cu un fișier
+de site per proiect în `/etc/caddy/sites/`. Provizionarea inițială: `deploy/setup.sh`.
 
 ## 8. Concepte transversale
 
@@ -138,7 +145,10 @@ Registrul de decizii este [docs/adr/](../adr/README.md), în format MADR.
   Carduri speciale: „Concluziile ședinței”, „ANUNȚ PRIVIND DESFĂȘURAREA ȘEDINȚEI”.
 - **Proiectul**: `article .post-content a[href]` către `files.primariaclujnapoca.ro` (parte
   scrisă, parte desenată, uneori adresa).
-- **Ordinea de zi**: PDF cu text. Rând = număr de ordine, `NNNNNN/ZZ.LL.AAAA`, beneficiar,
+- **Ordinea de zi**: PDF cu text în 17 din 20 de ședințe din 2026; 3 sunt scanate (19 ian., 15 apr.,
+  24 iun.) și rămân fără rânduri, doar cu cardurile (fără OCR în v1, decizie 2026-09-21). PDF-ul apare
+  cu 3–8 zile înaintea ședinței; cardurile încep să apară în aceeași zi și se completează până în ziua
+  ședinței, deci ordinea de zi e semnalul cel mai timpuriu și complet. Rând = număr de ordine, `NNNNNN/ZZ.LL.AAAA`, beneficiar,
   descriere cu amplasament; uneori „revenire CTATU”. Titluri inconsistente: P.U.Z / PUZ,
   P.U.D / PUD; „Studiu de oportunitate pentru inițiere PUZ” = aviz de oportunitate.
   `pdf-extract` lipește uneori tokenii vecini („10739800/24.08.2026Marian Ramona”): numărul

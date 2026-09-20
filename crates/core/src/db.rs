@@ -534,6 +534,16 @@ impl Db {
         Ok(conn.last_insert_rowid())
     }
 
+    /// Închide rulările rămase „în curs” după o oprire bruscă a procesului; întoarce câte au fost.
+    pub fn close_stale_runs(&self) -> Result<usize> {
+        let conn = self.conn()?;
+        let n = conn.execute(
+            "UPDATE sync_runs SET finished_at = ?1, ok = 0,                  error = COALESCE(error, 'întreruptă: procesul s-a oprit înainte de terminare')              WHERE finished_at IS NULL",
+            params![now_iso()],
+        )?;
+        Ok(n)
+    }
+
     pub fn finish_sync_run(&self, id: i64, ok: bool, counts: &RunCounts, error: Option<&str>) -> Result<()> {
         let conn = self.conn()?;
         conn.execute(

@@ -3,7 +3,3 @@ name = "urban-monitor"
 
 [web.app]
 title = "urban.monitor · Ședințe CTATU Cluj-Napoca"
-
-[web.resource]
-style = []
-script = []

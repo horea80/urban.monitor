@@ -11,13 +11,13 @@ Documentație: cerințe în [`docs/spec/requirements.md`](docs/spec/requirements
 ## Stack
 
 Rust (edition 2024) · Dioxus 0.7 fullstack · axum 0.8 · SQLite (rusqlite, FTS5) ·
-reqwest · scraper · pdf-extract · utoipa (OpenAPI) · Caddy + Docker pentru deploy.
+reqwest · scraper · pdf-extract · utoipa (OpenAPI) · systemd + Caddy pe VPS, fără Docker.
 
 ```
 crates/shared   tipuri + normalizare text (compilează și la wasm)
 crates/core     scraper, PDF, SQLite, sync, CLI `urban`
 crates/app      UI Dioxus + API JSON /api/v1 + OpenAPI
-deploy/         Dockerfile, Caddyfile, docker-compose.yml
+deploy/         setup.sh, deploy.sh, deploy-env.sh, urban.service, urban.caddy
 ```
 
 ## Prerechizite (Windows)
@@ -35,8 +35,9 @@ cargo install dioxus-cli --locked     # binarul `dx`
 ```powershell
 cargo build --workspace                      # primul build compilează toate dependențele
 cargo test --workspace                       # parserele rulează pe fixture-urile din crates/core/tests/fixtures
-cargo run -p urban-core --bin urban -- sync  # sincronizare manuală (după ce există comanda)
+cargo run -p urban-core --bin urban -- sync  # sincronizare manuală
 dx serve -p urban-app                        # UI + server, cu hot reload
+cargo run -p urban-app --features server     # doar server + SSR, fără wasm (bun pentru API)
 ```
 
 Variabile de mediu (toate au valori implicite):
@@ -50,13 +51,24 @@ Variabile de mediu (toate au valori implicite):
 | `URBAN_REQUEST_DELAY_MS` | `1000` | pauza între cereri către site-ul primăriei |
 | `IP` / `PORT` | `127.0.0.1` / `8080` | adresa serverului |
 
-## Deploy (VPS + Caddy)
+## Deploy (VPS Oracle ARM, systemd + Caddy, fără Docker)
+
+Box-ul e aarch64, deci build-ul de producție se face pe server ([ADR-0008](docs/adr/0008-deploy-fara-docker-systemd-caddy.md)).
+
+O singură dată, pe server, din directorul `deploy/` (după `scp -r deploy ubuntu@vps:` sau un clone):
+`./setup.sh` instalează rustup, `dx`, Caddy, utilizatorul `urban`, unitatea systemd și fișierul
+de site. Apoi pune domeniul real în `/etc/caddy/sites/urban.caddy` și `sudo systemctl reload caddy`.
+
+De pe stație (Git Bash), cu aliasul ssh din `~/.ssh/config` (implicit `millionphones`, vezi
+`deploy/deploy-common.sh`):
 
 ```bash
-cd deploy
-# editează domeniul în Caddyfile
-docker compose up -d --build
+cp .env.example .env.prod      # ajustează dacă e nevoie; .env.prod e ignorat de git
+./deploy/deploy-env.sh         # .env.prod → /opt/urban/.env
+./deploy/deploy.sh             # sursa → server, dx bundle --release acolo, instalare atomică, restart, /healthz
 ```
+
+Loguri: `ssh millionphones 'journalctl -u urban -f'`. Backup: copia fișierului `/opt/urban/data/urban.db`.
 
 ## API
 
@@ -65,4 +77,5 @@ Planul pentru chei API și cote: [ADR-0004](docs/adr/0004-api-public-openapi-aut
 
 ## Stare
 
-Schelet: workspace, manifeste, fixture-uri, deploy, CI. Codul de scraping, DB, UI și API urmează.
+Funcțional local: scraping, ordine de zi din PDF, SQLite/FTS5, CLI, UI (căutare, ședințe) și API
+OpenAPI. Urmează: primul deploy pe VPS cu `deploy/deploy.sh`.

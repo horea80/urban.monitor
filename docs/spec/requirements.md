@@ -41,7 +41,8 @@ Sursa unică de date: pagina publică
   ședinței cu: URL, titlu, adresă, data publicării, categorie (vezi FR-2).
 - FR-1.3 Când procesează o ședință, sistemul trebuie să descarce PDF-ul ordinii de zi, să
   extragă textul și să rețină rândurile tabelului (nr. crt., nr. înregistrare, dată, beneficiar,
-  descriere, marcaj „revenire CTATU”).
+  descriere, marcaj „revenire CTATU”). Dacă PDF-ul nu are strat de text (scanat), ședința rămâne
+  fără rânduri de agendă și proiectele ei vin doar din carduri; OCR nu face parte din v1.
 - FR-1.4 Când un rând din ordinea de zi corespunde unui proiect de pe pagină, sistemul trebuie
   să le lege și să completeze proiectul cu beneficiar și nr. înregistrare.
 - FR-1.5 Dacă un rând din ordinea de zi nu corespunde niciunui proiect publicat, sistemul
@@ -141,7 +142,8 @@ Sursa unică de date: pagina publică
   prin variabile de mediu cu valori implicite. Backup = copia fișierului SQLite.
 - **NFR-7 Compatibilitate.** Funcționează în browserele din 2017 încoace, pe desktop și mobil,
   inclusiv fără WebAssembly (degradat, dar funcțional).
-- **NFR-8 Portabilitate.** Se livrează ca imagine Docker; rulează pe orice VPS Linux.
+- **NFR-8 Portabilitate.** Se livrează ca binar Linux plus directorul `public/`, sub systemd;
+  build-ul se face pe serverul țintă, deci arhitectura (ARM sau x86) nu contează. Fără Docker.
 
 ## 5. În afara scopului v1
 

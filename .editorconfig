@@ -1,0 +1,18 @@
+# Jumătatea din editor a politicii de terminații de linie (.gitattributes e jumătatea din git).
+root = true
+
+[*]
+end_of_line = lf
+insert_final_newline = true
+charset = utf-8
+trim_trailing_whitespace = true
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.{bat,cmd}]
+end_of_line = crlf
+
+[*.rs]
+indent_style = space
+indent_size = 4
