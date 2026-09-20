@@ -1,0 +1,49 @@
+[package]
+name = "urban-app"
+description = "UI Dioxus fullstack + API JSON (OpenAPI) pentru urban.monitor."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+dioxus = { workspace = true, features = ["router", "fullstack"] }
+urban-shared = { path = "../shared" }
+serde = { workspace = true }
+chrono = { workspace = true }
+
+# server-only, activate prin feature `server`
+urban-core = { path = "../core", optional = true }
+axum = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+tower = { workspace = true, optional = true }
+tower-http = { workspace = true, optional = true }
+tower_governor = { workspace = true, optional = true }
+utoipa = { workspace = true, optional = true }
+utoipa-axum = { workspace = true, optional = true }
+utoipa-scalar = { workspace = true, optional = true }
+tracing = { workspace = true, optional = true }
+tracing-subscriber = { workspace = true, optional = true }
+anyhow = { workspace = true, optional = true }
+clap = { workspace = true, optional = true }
+
+[features]
+default = []
+web = ["dioxus/web"]
+server = [
+  "dioxus/server",
+  "urban-shared/openapi",
+  "dep:urban-core",
+  "dep:axum",
+  "dep:tokio",
+  "dep:tower",
+  "dep:tower-http",
+  "dep:tower_governor",
+  "dep:utoipa",
+  "dep:utoipa-axum",
+  "dep:utoipa-scalar",
+  "dep:tracing",
+  "dep:tracing-subscriber",
+  "dep:anyhow",
+  "dep:clap",
+]

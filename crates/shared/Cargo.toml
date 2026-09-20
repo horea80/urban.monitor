@@ -1,0 +1,21 @@
+[package]
+name = "urban-shared"
+description = "Tipuri și utilitare de text partajate între server și browser (wasm)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+chrono = { workspace = true }
+unicode-normalization = { workspace = true }
+utoipa = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[features]
+default = []
+# derive utoipa::ToSchema on the API types (server side only)
+openapi = ["dep:utoipa"]

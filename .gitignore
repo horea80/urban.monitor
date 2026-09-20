@@ -1,0 +1,12 @@
+/target
+/dist
+/data
+**/*.db
+**/*.db-wal
+**/*.db-shm
+.env
+.venv/
+__pycache__/
+*.log
+.DS_Store
+Thumbs.db
