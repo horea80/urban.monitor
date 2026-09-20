@@ -28,6 +28,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 impl Error {
     pub fn parse(url: &str, msg: impl Into<String>) -> Self {
-        Error::Parse { url: url.to_owned(), msg: msg.into() }
+        Error::Parse {
+            url: url.to_owned(),
+            msg: msg.into(),
+        }
     }
 }

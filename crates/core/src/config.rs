@@ -55,9 +55,15 @@ impl Default for Config {
 }
 
 fn env_or(key: &str, default: &str) -> String {
-    std::env::var(key).ok().filter(|v| !v.trim().is_empty()).unwrap_or_else(|| default.to_owned())
+    std::env::var(key)
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or_else(|| default.to_owned())
 }
 
 fn env_parse<T: FromStr>(key: &str, default: T) -> T {
-    std::env::var(key).ok().and_then(|v| v.trim().parse().ok()).unwrap_or(default)
+    std::env::var(key)
+        .ok()
+        .and_then(|v| v.trim().parse().ok())
+        .unwrap_or(default)
 }

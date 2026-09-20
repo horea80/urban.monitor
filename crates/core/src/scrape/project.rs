@@ -17,7 +17,9 @@ fn is_document(url: &str) -> bool {
         return false;
     }
     lower.contains(FILES_HOST)
-        || [".pdf", ".doc", ".docx", ".zip", ".dwg", ".xls", ".xlsx"].iter().any(|e| lower.ends_with(e))
+        || [".pdf", ".doc", ".docx", ".zip", ".dwg", ".xls", ".xlsx"]
+            .iter()
+            .any(|e| lower.ends_with(e))
 }
 
 /// Documentele din conținutul paginii. Caută întâi în `article .post-content`; dacă pagina
@@ -61,5 +63,7 @@ fn collect(doc: &Html, selector: &Selector, base: Option<&url::Url>) -> Vec<Docu
 
 /// Primul PDF din listă, de exemplu concluziile ședinței.
 pub fn first_pdf(docs: &[Document]) -> Option<&str> {
-    docs.iter().find(|d| d.url.to_lowercase().ends_with(".pdf")).map(|d| d.url.as_str())
+    docs.iter()
+        .find(|d| d.url.to_lowercase().ends_with(".pdf"))
+        .map(|d| d.url.as_str())
 }

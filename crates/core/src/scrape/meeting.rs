@@ -94,7 +94,13 @@ pub fn parse_meeting(html: &str, page_url: &str) -> MeetingPage {
         .filter_map(|art| parse_card(art, &resolve_href))
         .collect();
 
-    MeetingPage { title, date, time, agenda_url, cards }
+    MeetingPage {
+        title,
+        date,
+        time,
+        agenda_url,
+        cards,
+    }
 }
 
 fn parse_card(art: ElementRef<'_>, resolve_href: &dyn Fn(&str) -> Option<String>) -> Option<Card> {
@@ -124,5 +130,11 @@ fn parse_card(art: ElementRef<'_>, resolve_href: &dyn Fn(&str) -> Option<String>
         CardKind::Project
     };
 
-    Some(Card { kind, url, title, address, published_at })
+    Some(Card {
+        kind,
+        url,
+        title,
+        address,
+        published_at,
+    })
 }

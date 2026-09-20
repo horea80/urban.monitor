@@ -8,8 +8,8 @@ use chrono::{NaiveDate, SecondsFormat, Utc};
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::types::Value;
-use rusqlite::{params, params_from_iter, Connection, OptionalExtension, Row, Transaction};
-use rusqlite_migration::{Migrations, M};
+use rusqlite::{Connection, OptionalExtension, Row, Transaction, params, params_from_iter};
+use rusqlite_migration::{M, Migrations};
 
 use crate::error::Result;
 use urban_shared::text::{classify, normalize, tokens};
@@ -284,7 +284,10 @@ struct Filters {
 
 impl Filters {
     fn new() -> Self {
-        Filters { clauses: vec!["1=1".to_owned()], args: Vec::new() }
+        Filters {
+            clauses: vec!["1=1".to_owned()],
+            args: Vec::new(),
+        }
     }
 
     fn push_arg(&mut self, v: Value) -> usize {
@@ -295,7 +298,9 @@ impl Filters {
     fn fts(&mut self, id_col: &str, fts_table: &str, key_col: &str, query: Option<&str>) {
         if let Some(q) = query {
             let n = self.push_arg(Value::Text(q.to_owned()));
-            self.clauses.push(format!("{id_col} IN (SELECT {key_col} FROM {fts_table} WHERE {fts_table} MATCH ?{n})"));
+            self.clauses.push(format!(
+                "{id_col} IN (SELECT {key_col} FROM {fts_table} WHERE {fts_table} MATCH ?{n})"
+            ));
         }
     }
 
@@ -325,10 +330,10 @@ impl Filters {
 
 impl Db {
     pub fn open(path: &Path) -> Result<Db> {
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                std::fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            std::fs::create_dir_all(parent)?;
         }
         let manager = SqliteConnectionManager::file(path).with_init(|c| {
             c.execute_batch(
@@ -375,7 +380,12 @@ impl Db {
         let mut out = HashMap::new();
         for u in urls {
             let s = stmt
-                .query_row(params![u], |r| Ok(ItemSummary { id: r.get(0)?, docs_fetched: r.get(1)? }))
+                .query_row(params![u], |r| {
+                    Ok(ItemSummary {
+                        id: r.get(0)?,
+                        docs_fetched: r.get(1)?,
+                    })
+                })
                 .optional()?;
             if let Some(s) = s {
                 out.insert(u.clone(), s);
@@ -503,12 +513,19 @@ impl Db {
                 )?;
                 let row_id = tx.last_insert_rowid();
                 let text = fts_text([Some(r.description.as_str()), r.beneficiary.as_deref()]);
-                tx.execute("INSERT INTO agenda_fts (row_id, text) VALUES (?1, ?2)", params![row_id, text])?;
+                tx.execute(
+                    "INSERT INTO agenda_fts (row_id, text) VALUES (?1, ?2)",
+                    params![row_id, text],
+                )?;
             }
         }
 
         tx.commit()?;
-        Ok(WriteReport { meeting_id, items_new, items_total: m.items.len() })
+        Ok(WriteReport {
+            meeting_id,
+            items_new,
+            items_total: m.items.len(),
+        })
     }
 
     pub fn start_sync_run(&self) -> Result<i64> {
@@ -570,14 +587,22 @@ impl Db {
             g.fts("ar.id", "agenda_fts", "row_id", fts.as_deref());
             g.categories("ar.category", &q.categories);
             g.year("m.date", q.year);
-            let sql = format!("{AGENDA_SELECT} WHERE {} ORDER BY m.date DESC, ar.nr ASC LIMIT 50", g.sql());
+            let sql = format!(
+                "{AGENDA_SELECT} WHERE {} ORDER BY m.date DESC, ar.nr ASC LIMIT 50",
+                g.sql()
+            );
             let mut stmt = conn.prepare(&sql)?;
-            stmt.query_map(params_from_iter(g.args.iter()), row_to_agenda)?.collect::<rusqlite::Result<_>>()?
+            stmt.query_map(params_from_iter(g.args.iter()), row_to_agenda)?
+                .collect::<rusqlite::Result<_>>()?
         } else {
             Vec::new()
         };
 
-        Ok(SearchResult { total: total as u32, items, agenda_only })
+        Ok(SearchResult {
+            total: total as u32,
+            items,
+            agenda_only,
+        })
     }
 
     pub fn list_meetings(&self) -> Result<Vec<Meeting>> {
@@ -589,22 +614,32 @@ impl Db {
     pub fn get_meeting(&self, id: i64) -> Result<Option<Meeting>> {
         let conn = self.conn()?;
         Ok(conn
-            .query_row(&format!("{MEETING_SELECT} WHERE m.id = ?1"), params![id], row_to_meeting)
+            .query_row(
+                &format!("{MEETING_SELECT} WHERE m.id = ?1"),
+                params![id],
+                row_to_meeting,
+            )
             .optional()?)
     }
 
     pub fn items_for_meeting(&self, meeting_id: i64) -> Result<Vec<Item>> {
         let conn = self.conn()?;
         let mut stmt = conn.prepare(&format!("{ITEM_SELECT} WHERE i.meeting_id = ?1 ORDER BY i.id ASC"))?;
-        let mut items: Vec<Item> = stmt.query_map(params![meeting_id], row_to_item)?.collect::<rusqlite::Result<_>>()?;
+        let mut items: Vec<Item> = stmt
+            .query_map(params![meeting_id], row_to_item)?
+            .collect::<rusqlite::Result<_>>()?;
         attach_documents(&conn, &mut items)?;
         Ok(items)
     }
 
     pub fn agenda_rows_for_meeting(&self, meeting_id: i64) -> Result<Vec<AgendaRowView>> {
         let conn = self.conn()?;
-        let mut stmt = conn.prepare(&format!("{AGENDA_SELECT} WHERE ar.meeting_id = ?1 ORDER BY ar.nr ASC, ar.id ASC"))?;
-        Ok(stmt.query_map(params![meeting_id], row_to_agenda)?.collect::<rusqlite::Result<_>>()?)
+        let mut stmt = conn.prepare(&format!(
+            "{AGENDA_SELECT} WHERE ar.meeting_id = ?1 ORDER BY ar.nr ASC, ar.id ASC"
+        ))?;
+        Ok(stmt
+            .query_map(params![meeting_id], row_to_agenda)?
+            .collect::<rusqlite::Result<_>>()?)
     }
 
     pub fn get_item(&self, id: i64) -> Result<Option<Item>> {
@@ -629,7 +664,9 @@ impl Db {
             "SELECT street, COUNT(*) FROM items WHERE street IS NOT NULL AND street <> '' \
              GROUP BY street ORDER BY street COLLATE NOCASE",
         )?;
-        Ok(stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<rusqlite::Result<_>>()?)
+        Ok(stmt
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?)
     }
 
     pub fn status(&self) -> Result<Status> {
@@ -648,7 +685,12 @@ impl Db {
                 row_to_sync_run,
             )
             .optional()?;
-        Ok(Status { meetings, items, agenda_rows_unmatched: unmatched, last_run })
+        Ok(Status {
+            meetings,
+            items,
+            agenda_rows_unmatched: unmatched,
+            last_run,
+        })
     }
 }
 
@@ -662,7 +704,10 @@ fn reindex_item(tx: &Transaction<'_>, id: i64) -> Result<()> {
         },
     )?;
     tx.execute("DELETE FROM items_fts WHERE item_id = ?1", params![id])?;
-    tx.execute("INSERT INTO items_fts (item_id, text) VALUES (?1, ?2)", params![id, text])?;
+    tx.execute(
+        "INSERT INTO items_fts (item_id, text) VALUES (?1, ?2)",
+        params![id, text],
+    )?;
     Ok(())
 }
 
@@ -672,11 +717,20 @@ fn attach_documents(conn: &Connection, items: &mut [Item]) -> Result<()> {
     }
     let ids: Vec<Value> = items.iter().map(|i| Value::Integer(i.id)).collect();
     let ph: Vec<String> = (1..=ids.len()).map(|n| format!("?{n}")).collect();
-    let sql = format!("SELECT item_id, label, url FROM documents WHERE item_id IN ({}) ORDER BY id", ph.join(","));
+    let sql = format!(
+        "SELECT item_id, label, url FROM documents WHERE item_id IN ({}) ORDER BY id",
+        ph.join(",")
+    );
     let mut stmt = conn.prepare(&sql)?;
     let mut by_item: HashMap<i64, Vec<Document>> = HashMap::new();
     let rows = stmt.query_map(params_from_iter(ids.iter()), |r| {
-        Ok((r.get::<_, i64>(0)?, Document { label: r.get(1)?, url: r.get(2)? }))
+        Ok((
+            r.get::<_, i64>(0)?,
+            Document {
+                label: r.get(1)?,
+                url: r.get(2)?,
+            },
+        ))
     })?;
     for row in rows {
         let (item_id, doc) = row?;
@@ -696,7 +750,10 @@ mod tests {
 
     #[test]
     fn fts_query_builds_prefix_terms() {
-        assert_eq!(fts_query("Brâncuși nr. 107").as_deref(), Some("\"brancusi\"* \"nr\"* \"107\"*"));
+        assert_eq!(
+            fts_query("Brâncuși nr. 107").as_deref(),
+            Some("\"brancusi\"* \"nr\"* \"107\"*")
+        );
         assert_eq!(fts_query("   "), None);
     }
 }

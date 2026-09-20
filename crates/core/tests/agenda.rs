@@ -1,9 +1,9 @@
 mod common;
 
 use common::*;
-use urban_core::agenda::{match_rows, parse_agenda, AgendaRow};
+use urban_core::agenda::{AgendaRow, match_rows, parse_agenda};
 use urban_core::pdf::{PdfExtract, PdfText};
-use urban_core::scrape::{parse_meeting, Card};
+use urban_core::scrape::{Card, parse_meeting};
 
 fn rows(name: &str) -> Vec<AgendaRow> {
     let text = PdfExtract.extract(&fixture_bytes(name)).expect("text din PDF");
@@ -47,7 +47,10 @@ fn agenda_2026_01_14_has_17_rows() {
     assert_eq!(r[1].reg_date.as_deref(), Some("2.12.2025"));
     assert_eq!(r[1].beneficiary.as_deref(), Some("Maglio Construct Investment S.R.L"));
     assert!(r[1].description.contains("Odobesti"));
-    assert_eq!(r[7].beneficiary.as_deref(), Some("Patiu Sorin Vasile și Grecu Marius Gheorghe"));
+    assert_eq!(
+        r[7].beneficiary.as_deref(),
+        Some("Patiu Sorin Vasile și Grecu Marius Gheorghe")
+    );
     assert!(r[10].revenire);
     assert_eq!(r[10].beneficiary.as_deref(), Some("Salanta Marius Daniel"));
     assert!(r[10].description.contains("Doinei 95"));
@@ -99,7 +102,9 @@ fn rows_match_published_cards() {
 
 #[test]
 fn scanned_pdf_yields_no_text() {
-    let text = PdfExtract.extract(&fixture_bytes("conclusions-2026-09-16-scanned.pdf")).expect("fără eroare");
+    let text = PdfExtract
+        .extract(&fixture_bytes("conclusions-2026-09-16-scanned.pdf"))
+        .expect("fără eroare");
     assert!(text.trim().is_empty());
     assert!(parse_agenda(&text).is_empty());
 }

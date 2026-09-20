@@ -51,7 +51,18 @@ fn is_header_line(n: &str) -> bool {
 }
 
 fn is_footer_line(n: &str) -> bool {
-    n.starts_with("primar") || n.contains("arhitect sef") || n.contains("digitally signed") || n.contains("semnat digital")
+    n.starts_with("primar")
+        || n.contains("arhitect sef")
+        || n.contains("digitally signed")
+        || n.contains("semnat digital")
+}
+
+/// Un rând în curs de asamblare: antetul recunoscut de `ROW_START` plus liniile de continuare.
+struct Block {
+    nr: Option<u32>,
+    reg_number: Option<String>,
+    reg_date: Option<String>,
+    parts: Vec<String>,
 }
 
 /// Rândurile tabelului din ordinea de zi.
@@ -64,7 +75,7 @@ pub fn parse_agenda(text: &str) -> Vec<AgendaRow> {
         .map(|i| i + 1)
         .unwrap_or(0);
 
-    let mut blocks: Vec<(Option<u32>, Option<String>, Option<String>, Vec<String>)> = Vec::new();
+    let mut blocks: Vec<Block> = Vec::new();
     let mut expected_nr: u32 = 1;
 
     for line in &lines[start..] {
@@ -85,22 +96,41 @@ pub fn parse_agenda(text: &str) -> Vec<AgendaRow> {
             if !rest.is_empty() {
                 parts.push(rest);
             }
-            blocks.push((nr, reg, Some(c[3].to_owned()), parts));
+            blocks.push(Block {
+                nr,
+                reg_number: reg,
+                reg_date: Some(c[3].to_owned()),
+                parts,
+            });
         } else if let Some(last) = blocks.last_mut() {
-            last.3.push(line.trim().to_owned());
+            last.parts.push(line.trim().to_owned());
         }
     }
 
     blocks
         .into_iter()
-        .map(|(nr, reg_number, reg_date, parts)| {
-            let joined = parts.join(" ").split_whitespace().collect::<Vec<_>>().join(" ");
-            let revenire = REVENIRE.is_match(&joined);
-            let cleaned = REVENIRE.replace_all(&joined, " ").to_string();
-            let cleaned = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
-            let (beneficiary, description) = split_beneficiary(&cleaned);
-            AgendaRow { nr, reg_number, reg_date, beneficiary, description, revenire }
-        })
+        .map(
+            |Block {
+                 nr,
+                 reg_number,
+                 reg_date,
+                 parts,
+             }| {
+                let joined = parts.join(" ").split_whitespace().collect::<Vec<_>>().join(" ");
+                let revenire = REVENIRE.is_match(&joined);
+                let cleaned = REVENIRE.replace_all(&joined, " ").to_string();
+                let cleaned = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
+                let (beneficiary, description) = split_beneficiary(&cleaned);
+                AgendaRow {
+                    nr,
+                    reg_number,
+                    reg_date,
+                    beneficiary,
+                    description,
+                    revenire,
+                }
+            },
+        )
         .collect()
 }
 
@@ -137,15 +167,84 @@ fn split_beneficiary(text: &str) -> (Option<String>, String) {
 }
 
 const STOPWORDS: [&str; 78] = [
-    "str", "strada", "nr", "de", "si", "pentru", "cu", "in", "la", "a", "pe", "din", "zona", "calea",
-    "sud", "nord", "est", "vest", "latura", "estica", "vestica", "nordica", "sudica", "initiere",
-    "elaborare", "elaboare", "studiu", "sudiu", "oportunitate", "puz", "pud", "p", "u", "z", "d",
-    "construire", "imobil", "imobile", "locuinta", "locuinte", "unifamiliala", "unifamiliale",
-    "semicolectiva", "colectiva", "colective", "mixt", "mixte", "functiuni", "ansamblu",
-    "dezvoltare", "parcelare", "regim", "redus", "inaltime", "aviz", "actualizare", "urbanizare",
-    "restructurare", "urbana", "amenajari", "exterioare", "desfiintare", "extindere", "etajare",
-    "modificari", "interioare", "amenajare", "edicul", "parcare", "teren", "sc", "srl", "s", "r", "l",
-    "activitati", "economice", "caracter",
+    "str",
+    "strada",
+    "nr",
+    "de",
+    "si",
+    "pentru",
+    "cu",
+    "in",
+    "la",
+    "a",
+    "pe",
+    "din",
+    "zona",
+    "calea",
+    "sud",
+    "nord",
+    "est",
+    "vest",
+    "latura",
+    "estica",
+    "vestica",
+    "nordica",
+    "sudica",
+    "initiere",
+    "elaborare",
+    "elaboare",
+    "studiu",
+    "sudiu",
+    "oportunitate",
+    "puz",
+    "pud",
+    "p",
+    "u",
+    "z",
+    "d",
+    "construire",
+    "imobil",
+    "imobile",
+    "locuinta",
+    "locuinte",
+    "unifamiliala",
+    "unifamiliale",
+    "semicolectiva",
+    "colectiva",
+    "colective",
+    "mixt",
+    "mixte",
+    "functiuni",
+    "ansamblu",
+    "dezvoltare",
+    "parcelare",
+    "regim",
+    "redus",
+    "inaltime",
+    "aviz",
+    "actualizare",
+    "urbanizare",
+    "restructurare",
+    "urbana",
+    "amenajari",
+    "exterioare",
+    "desfiintare",
+    "extindere",
+    "etajare",
+    "modificari",
+    "interioare",
+    "amenajare",
+    "edicul",
+    "parcare",
+    "teren",
+    "sc",
+    "srl",
+    "s",
+    "r",
+    "l",
+    "activitati",
+    "economice",
+    "caracter",
 ];
 
 fn is_stopword(t: &str) -> bool {
@@ -160,7 +259,11 @@ fn is_numeric(t: &str) -> bool {
 fn card_weights(card: &Card) -> HashMap<String, u32> {
     let mut w: HashMap<String, u32> = HashMap::new();
     for t in tokens(&card.title) {
-        let weight = if t.len() <= 1 || is_stopword(&t) || is_numeric(&t) { 0 } else { 1 };
+        let weight = if t.len() <= 1 || is_stopword(&t) || is_numeric(&t) {
+            0
+        } else {
+            1
+        };
         w.entry(t).and_modify(|x| *x = (*x).max(weight)).or_insert(weight);
     }
     if let Some(addr) = &card.address {
@@ -266,10 +369,16 @@ mod tests {
         let cards = vec![
             card("P.U.D construire locuință semicolectivă", "str. Doinei nr. 95"),
             card("P.U.D construire locuință semicolectivă", "str. Doinei nr. 93"),
-            card("Studiu de oportunitate pentru inițiere PUZ", "str. Giordano Bruno nr. 41"),
+            card(
+                "Studiu de oportunitate pentru inițiere PUZ",
+                "str. Giordano Bruno nr. 41",
+            ),
             card("P.U.Z construire locuintă unifamilială", "str. Trifoiului nr. 41"),
         ];
-        let row = |d: &str| AgendaRow { description: d.into(), ..Default::default() };
+        let row = |d: &str| AgendaRow {
+            description: d.into(),
+            ..Default::default()
+        };
         let rows = vec![
             row("PUD construire locuinta semicolectiva, str.Doinei 93"),
             row("Studiu de oportunitate pentru initiere elaborare P.U.Z str,. Giordano Bruno nr. 41"),

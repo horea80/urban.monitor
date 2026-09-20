@@ -38,11 +38,17 @@ fn meeting_2026_09_16_header_and_cards() {
     assert_eq!(p.cards.len(), 15);
     assert_eq!(p.projects().count(), 13);
     let c = p.conclusions().expect("card concluzii");
-    assert_eq!(c.url, "https://primariaclujnapoca.ro/urbanism/proiecte-de-urbanism/concluziile-sedintei-41/");
+    assert_eq!(
+        c.url,
+        "https://primariaclujnapoca.ro/urbanism/proiecte-de-urbanism/concluziile-sedintei-41/"
+    );
     let a = p.announcement().expect("card anunț");
     assert!(a.url.ends_with("/anunt-privind-desfasurarea-sedintei-115/"));
 
-    let b = p.projects().find(|c| c.url.ends_with("/p-u-d-construire-imobil-mixt-118/")).expect("card Brâncuși");
+    let b = p
+        .projects()
+        .find(|c| c.url.ends_with("/p-u-d-construire-imobil-mixt-118/"))
+        .expect("card Brâncuși");
     assert_eq!(b.title, "P.U.D construire imobil mixt");
     assert_eq!(b.address.as_deref(), Some("str C-tin Brancusi nr 107-109"));
     assert_eq!(b.published_at.as_deref(), Some("2026-09-10T14:43:59+03:00"));
@@ -57,7 +63,10 @@ fn other_2026_meetings_parse() {
     assert_eq!(p.date, ymd(2026, 1, 14));
     assert_eq!(p.time.as_deref(), Some("10:30"));
     assert_eq!(p.projects().count(), 17);
-    assert_eq!(p.agenda_url.as_deref(), Some("https://files.primariaclujnapoca.ro/2026/01/09/Ordine-de-zi-CTATU-14-01-2026.pdf"));
+    assert_eq!(
+        p.agenda_url.as_deref(),
+        Some("https://files.primariaclujnapoca.ro/2026/01/09/Ordine-de-zi-CTATU-14-01-2026.pdf")
+    );
 
     let p = parse_meeting(&fixture("meeting-2026-05-27.html"), MEETING_0527);
     assert_eq!(p.date, ymd(2026, 5, 27));
@@ -72,10 +81,17 @@ fn project_pages_list_documents() {
     let docs = parse_documents(&fixture("project-pud-imobil-mixt-118.html"), url);
     let labels: Vec<&str> = docs.iter().map(|d| d.label.as_str()).collect();
     assert_eq!(labels, vec!["parte scrisă", "parte desenată", "adresa"]);
-    assert_eq!(docs[0].url, "https://files.primariaclujnapoca.ro/2026/09/10/parte-scrisa.pdf");
-    assert!(docs.iter().all(|d| d.url.starts_with("https://files.primariaclujnapoca.ro/")));
+    assert_eq!(
+        docs[0].url,
+        "https://files.primariaclujnapoca.ro/2026/09/10/parte-scrisa.pdf"
+    );
+    assert!(
+        docs.iter()
+            .all(|d| d.url.starts_with("https://files.primariaclujnapoca.ro/"))
+    );
 
-    let url = "https://primariaclujnapoca.ro/urbanism/proiecte-de-urbanism/studiu-de-oportunitate-pentru-initiere-puz-38/";
+    let url =
+        "https://primariaclujnapoca.ro/urbanism/proiecte-de-urbanism/studiu-de-oportunitate-pentru-initiere-puz-38/";
     let docs = parse_documents(&fixture("project-studiu-oportunitate-puz-38.html"), url);
     let labels: Vec<&str> = docs.iter().map(|d| d.label.as_str()).collect();
     assert_eq!(labels, vec!["Parte scrisă", "Parte desenată"]);
@@ -85,7 +101,10 @@ fn project_pages_list_documents() {
 fn conclusions_page_has_scanned_pdf() {
     let url = "https://primariaclujnapoca.ro/urbanism/proiecte-de-urbanism/concluziile-sedintei-41/";
     let docs = parse_documents(&fixture("conclusions-page-41.html"), url);
-    assert_eq!(first_pdf(&docs), Some("https://files.primariaclujnapoca.ro/2026/09/16/202609161352-1.pdf"));
+    assert_eq!(
+        first_pdf(&docs),
+        Some("https://files.primariaclujnapoca.ro/2026/09/16/202609161352-1.pdf")
+    );
 }
 
 #[test]

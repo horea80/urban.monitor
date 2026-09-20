@@ -4,15 +4,19 @@
 use clap::{Parser, Subcommand};
 use tracing_subscriber::EnvFilter;
 
+use urban_core::Config;
 use urban_core::db::Db;
 use urban_core::pdf::Chain;
 use urban_core::scrape::Client;
 use urban_core::shared::{Category, SearchQuery};
 use urban_core::sync::{self, SyncOptions};
-use urban_core::Config;
 
 #[derive(Parser)]
-#[command(name = "urban", version, about = "Ședințele CTATU Cluj-Napoca: sincronizare și căutare după stradă")]
+#[command(
+    name = "urban",
+    version,
+    about = "Ședințele CTATU Cluj-Napoca: sincronizare și căutare după stradă"
+)]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
@@ -82,8 +86,20 @@ async fn main() -> anyhow::Result<()> {
                 std::process::exit(1);
             }
         }
-        Cmd::Search { q, tip, an, limit, json } => {
-            let query = SearchQuery { q: q.join(" "), categories: tip, year: an, limit, offset: 0 };
+        Cmd::Search {
+            q,
+            tip,
+            an,
+            limit,
+            json,
+        } => {
+            let query = SearchQuery {
+                q: q.join(" "),
+                categories: tip,
+                year: an,
+                limit,
+                offset: 0,
+            };
             let result = db.search(&query)?;
             if json {
                 println!("{}", serde_json::to_string_pretty(&result)?);
@@ -98,20 +114,29 @@ async fn main() -> anyhow::Result<()> {
                     it.title,
                     "",
                     it.address.as_deref().unwrap_or("-"),
-                    it.beneficiary.as_deref().map(|b| format!("  ·  {b}")).unwrap_or_default(),
+                    it.beneficiary
+                        .as_deref()
+                        .map(|b| format!("  ·  {b}"))
+                        .unwrap_or_default(),
                     "",
                     it.url
                 );
             }
             if !result.agenda_only.is_empty() {
-                println!("\n{} rânduri doar în ordinea de zi, fără proiect publicat:", result.agenda_only.len());
+                println!(
+                    "\n{} rânduri doar în ordinea de zi, fără proiect publicat:",
+                    result.agenda_only.len()
+                );
                 for r in &result.agenda_only {
                     println!(
                         "{}  {:<24}  {}{}",
                         r.meeting_date,
                         r.category.label(),
                         r.description,
-                        r.beneficiary.as_deref().map(|b| format!("  ·  {b}")).unwrap_or_default()
+                        r.beneficiary
+                            .as_deref()
+                            .map(|b| format!("  ·  {b}"))
+                            .unwrap_or_default()
                     );
                 }
             }
@@ -123,14 +148,21 @@ async fn main() -> anyhow::Result<()> {
                     m.date,
                     m.time.as_deref().unwrap_or("-"),
                     m.item_count,
-                    if m.conclusions_pdf_url.is_some() { "concluzii" } else { "         " },
+                    if m.conclusions_pdf_url.is_some() {
+                        "concluzii"
+                    } else {
+                        "         "
+                    },
                     m.url
                 );
             }
         }
         Cmd::Status => {
             let s = db.status()?;
-            println!("ședințe: {}  proiecte: {}  rânduri de agendă nepotrivite: {}", s.meetings, s.items, s.agenda_rows_unmatched);
+            println!(
+                "ședințe: {}  proiecte: {}  rânduri de agendă nepotrivite: {}",
+                s.meetings, s.items, s.agenda_rows_unmatched
+            );
             match s.last_run {
                 Some(r) => println!(
                     "ultima sincronizare: început {}  sfârșit {}  ok={}  ședințe {}/{}  proiecte noi {}{}",
@@ -140,7 +172,10 @@ async fn main() -> anyhow::Result<()> {
                     r.meetings_updated,
                     r.meetings_seen,
                     r.items_new,
-                    r.error.as_deref().map(|e| format!("\n  eroare: {e}")).unwrap_or_default()
+                    r.error
+                        .as_deref()
+                        .map(|e| format!("\n  eroare: {e}"))
+                        .unwrap_or_default()
                 ),
                 None => println!("nicio sincronizare încă; rulează `urban sync`"),
             }

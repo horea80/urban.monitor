@@ -4,12 +4,12 @@
 use chrono::{Datelike, Local};
 use tracing::{error, info, warn};
 
-use crate::agenda::{match_rows, parse_agenda, AgendaRow};
+use crate::agenda::{AgendaRow, match_rows, parse_agenda};
 use crate::config::Config;
 use crate::db::{AgendaRowWrite, Db, ItemWrite, MeetingSummary, MeetingWrite, RunCounts, WriteReport};
 use crate::error::{Error, Result};
 use crate::pdf::PdfText;
-use crate::scrape::{first_pdf, parse_documents, parse_listing, parse_meeting, Card, Client, MeetingRef};
+use crate::scrape::{Card, Client, MeetingRef, first_pdf, parse_documents, parse_listing, parse_meeting};
 use urban_shared::text::{classify, street_of};
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -43,7 +43,11 @@ pub async fn run(cfg: &Config, client: &Client, db: &Db, pdf: &dyn PdfText, opts
     let result = run_inner(cfg, client, db, pdf, opts).await;
     match &result {
         Ok(rep) => {
-            let error = if rep.errors.is_empty() { None } else { Some(rep.errors.join("\n")) };
+            let error = if rep.errors.is_empty() {
+                None
+            } else {
+                Some(rep.errors.join("\n"))
+            };
             db.finish_sync_run(run_id, rep.errors.is_empty(), &rep.counts(), error.as_deref())?;
         }
         Err(e) => db.finish_sync_run(run_id, false, &RunCounts::default(), Some(&e.to_string()))?,
@@ -55,7 +59,10 @@ async fn run_inner(cfg: &Config, client: &Client, db: &Db, pdf: &dyn PdfText, op
     let html = client.get_html(&cfg.listing_url).await?;
     let listing = parse_listing(&html, &cfg.listing_url);
     if listing.is_empty() {
-        return Err(Error::parse(&cfg.listing_url, "nicio ședință găsită în listă; s-a schimbat structura paginii?"));
+        return Err(Error::parse(
+            &cfg.listing_url,
+            "nicio ședință găsită în listă; s-a schimbat structura paginii?",
+        ));
     }
 
     let today = Local::now().date_naive();
@@ -65,7 +72,10 @@ async fn run_inner(cfg: &Config, client: &Client, db: &Db, pdf: &dyn PdfText, op
         .collect();
     selected.sort_by_key(|m| m.date);
 
-    let mut report = SyncReport { meetings_seen: selected.len(), ..Default::default() };
+    let mut report = SyncReport {
+        meetings_seen: selected.len(),
+        ..Default::default()
+    };
     info!(total = selected.len(), start_year = cfg.start_year, "ședințe în listă");
 
     for mref in &selected {
@@ -112,7 +122,10 @@ async fn process_meeting(
         .ok_or_else(|| Error::parse(&mref.url, "nu am putut determina data ședinței"))?;
     let projects: Vec<Card> = page.projects().cloned().collect();
     if projects.is_empty() {
-        warnings.push(format!("{}: 0 proiecte pe pagina ședinței; s-a schimbat structura?", mref.url));
+        warnings.push(format!(
+            "{}: 0 proiecte pe pagina ședinței; s-a schimbat structura?",
+            mref.url
+        ));
     }
 
     // ordinea de zi (FR-1.3)
@@ -193,7 +206,10 @@ async fn process_meeting(
         let matched = match_rows(&rows, &projects);
         let unmatched = matched.iter().filter(|m| m.is_none()).count();
         if unmatched > 0 {
-            warnings.push(format!("{}: {unmatched} rânduri din ordinea de zi fără proiect publicat", mref.url));
+            warnings.push(format!(
+                "{}: {unmatched} rânduri din ordinea de zi fără proiect publicat",
+                mref.url
+            ));
         }
         rows.into_iter()
             .zip(matched)
@@ -221,7 +237,11 @@ async fn process_meeting(
 
     let mw = MeetingWrite {
         url: mref.url.clone(),
-        title: if page.title.is_empty() { mref.title.clone() } else { page.title.clone() },
+        title: if page.title.is_empty() {
+            mref.title.clone()
+        } else {
+            page.title.clone()
+        },
         date,
         time: page.time.clone(),
         agenda_url: page.agenda_url.clone(),

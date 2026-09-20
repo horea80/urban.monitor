@@ -6,8 +6,8 @@ pub mod meeting;
 pub mod project;
 
 pub use client::Client;
-pub use listing::{parse_listing, MeetingRef};
-pub use meeting::{parse_meeting, Card, CardKind, MeetingPage};
+pub use listing::{MeetingRef, parse_listing};
+pub use meeting::{Card, CardKind, MeetingPage, parse_meeting};
 pub use project::{first_pdf, parse_documents};
 
 /// Textul unui element, cu spatiile normalizate.

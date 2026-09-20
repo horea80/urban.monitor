@@ -5,7 +5,8 @@ pub mod model;
 pub mod text;
 
 pub use model::{
-    AgendaRowView, Category, Document, Item, Meeting, MeetingDetail, SearchQuery, SearchResult, Status, StreetCount, SyncRun,
+    AgendaRowView, Category, Document, Item, Meeting, MeetingDetail, SearchQuery, SearchResult, Status, StreetCount,
+    SyncRun,
 };
 
 pub const NAME: &str = "urban.monitor";

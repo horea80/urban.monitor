@@ -20,7 +20,12 @@ pub enum Category {
 }
 
 impl Category {
-    pub const ALL: [Category; 4] = [Category::AvizOportunitate, Category::Puz, Category::Pud, Category::Altele];
+    pub const ALL: [Category; 4] = [
+        Category::AvizOportunitate,
+        Category::Puz,
+        Category::Pud,
+        Category::Altele,
+    ];
 
     /// Forma stocată în baza de date și folosită în query string.
     pub fn as_str(self) -> &'static str {
@@ -232,7 +237,10 @@ mod tests {
         assert_eq!(q.limit, 50);
         assert_eq!(q.offset, 0);
         assert!(q.categories.is_empty());
-        let big = SearchQuery { limit: 10_000, ..Default::default() };
+        let big = SearchQuery {
+            limit: 10_000,
+            ..Default::default()
+        };
         assert_eq!(big.clamped_limit(), SearchQuery::MAX_LIMIT);
     }
 }

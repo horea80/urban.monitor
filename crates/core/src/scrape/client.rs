@@ -27,7 +27,10 @@ impl Client {
             .timeout(Duration::from_secs(60))
             .connect_timeout(Duration::from_secs(20))
             .build()
-            .map_err(|e| Error::Http { url: String::new(), source: e })?;
+            .map_err(|e| Error::Http {
+                url: String::new(),
+                source: e,
+            })?;
         Ok(Client {
             http,
             delay: cfg.request_delay,
@@ -67,11 +70,10 @@ impl Client {
                 Ok(resp) => {
                     let status = resp.status();
                     if status.is_success() {
-                        return resp
-                            .bytes()
-                            .await
-                            .map(|b| b.to_vec())
-                            .map_err(|e| Error::Http { url: url.to_owned(), source: e });
+                        return resp.bytes().await.map(|b| b.to_vec()).map_err(|e| Error::Http {
+                            url: url.to_owned(),
+                            source: e,
+                        });
                     }
                     let transient = status.is_server_error() || status.as_u16() == 429;
                     if transient && attempt < MAX_ATTEMPTS {
@@ -79,7 +81,10 @@ impl Client {
                         self.backoff(attempt).await;
                         continue;
                     }
-                    return Err(Error::Status { url: url.to_owned(), status: status.as_u16() });
+                    return Err(Error::Status {
+                        url: url.to_owned(),
+                        status: status.as_u16(),
+                    });
                 }
                 Err(e) => {
                     let transient = e.is_timeout() || e.is_connect() || e.is_request();
@@ -88,7 +93,10 @@ impl Client {
                         self.backoff(attempt).await;
                         continue;
                     }
-                    return Err(Error::Http { url: url.to_owned(), source: e });
+                    return Err(Error::Http {
+                        url: url.to_owned(),
+                        source: e,
+                    });
                 }
             }
         }
@@ -128,7 +136,13 @@ pub fn snapshot_name(url: &str, ext: &str) -> String {
     let stripped = url.trim_start_matches("https://").trim_start_matches("http://");
     let sanitized: String = stripped
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '.' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '.' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     let name = sanitized.trim_matches('_');
     if name.len() > 150 {
@@ -145,8 +159,14 @@ mod tests {
 
     #[test]
     fn snapshot_names_are_readable_and_bounded() {
-        let n = snapshot_name("https://primariaclujnapoca.ro/urbanism/sedinte-comisie/sedinta-din-16-septembrie-2026/", "html");
-        assert_eq!(n, "primariaclujnapoca.ro_urbanism_sedinte-comisie_sedinta-din-16-septembrie-2026.html");
+        let n = snapshot_name(
+            "https://primariaclujnapoca.ro/urbanism/sedinte-comisie/sedinta-din-16-septembrie-2026/",
+            "html",
+        );
+        assert_eq!(
+            n,
+            "primariaclujnapoca.ro_urbanism_sedinte-comisie_sedinta-din-16-septembrie-2026.html"
+        );
         let long = format!("https://x.ro/{}", "a".repeat(400));
         let n = snapshot_name(&long, "pdf");
         assert!(n.len() < 180);

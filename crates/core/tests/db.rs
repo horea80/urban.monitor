@@ -31,7 +31,10 @@ fn meeting_0916() -> MeetingWrite {
                 reg_date: Some("27.08.2026".into()),
                 revenire: false,
                 agenda_description: Some("P.U.D construire imobil mixt str C-tin Brancusi nr 107-109".into()),
-                documents: Some(vec![Document { label: "parte scrisă".into(), url: "https://files/ps.pdf".into() }]),
+                documents: Some(vec![Document {
+                    label: "parte scrisă".into(),
+                    url: "https://files/ps.pdf".into(),
+                }]),
             },
             ItemWrite {
                 url: "https://x/studiu-7/".into(),
@@ -70,7 +73,12 @@ fn write_then_search() {
     assert_eq!(rep.items_total, 2);
 
     // prefix, fără diacritice, cu majuscule
-    let r = db.search(&SearchQuery { q: "BRANCUS".into(), ..Default::default() }).unwrap();
+    let r = db
+        .search(&SearchQuery {
+            q: "BRANCUS".into(),
+            ..Default::default()
+        })
+        .unwrap();
     assert_eq!(r.total, 1);
     assert_eq!(r.items[0].title, "P.U.D construire imobil mixt");
     assert_eq!(r.items[0].beneficiary.as_deref(), Some("Batiment Vert SRL"));
@@ -78,32 +86,63 @@ fn write_then_search() {
     assert_eq!(r.items[0].meeting_date, NaiveDate::from_ymd_opt(2026, 9, 16).unwrap());
 
     // diacritice în sens invers: căutăm fără, textul are
-    let r = db.search(&SearchQuery { q: "campului".into(), ..Default::default() }).unwrap();
+    let r = db
+        .search(&SearchQuery {
+            q: "campului".into(),
+            ..Default::default()
+        })
+        .unwrap();
     assert_eq!(r.total, 1);
     assert_eq!(r.items[0].category, Category::AvizOportunitate);
 
     // beneficiarul e indexat
-    let r = db.search(&SearchQuery { q: "batiment vert".into(), ..Default::default() }).unwrap();
+    let r = db
+        .search(&SearchQuery {
+            q: "batiment vert".into(),
+            ..Default::default()
+        })
+        .unwrap();
     assert_eq!(r.total, 1);
 
     // fără text: toate, filtrate pe categorie și an
     let r = db.search(&SearchQuery::default()).unwrap();
     assert_eq!(r.total, 2);
     assert!(r.agenda_only.is_empty());
-    let r = db.search(&SearchQuery { categories: vec![Category::Pud], ..Default::default() }).unwrap();
+    let r = db
+        .search(&SearchQuery {
+            categories: vec![Category::Pud],
+            ..Default::default()
+        })
+        .unwrap();
     assert_eq!(r.total, 1);
-    let r = db.search(&SearchQuery { year: Some(2025), ..Default::default() }).unwrap();
+    let r = db
+        .search(&SearchQuery {
+            year: Some(2025),
+            ..Default::default()
+        })
+        .unwrap();
     assert_eq!(r.total, 0);
 
     // rând doar în ordinea de zi
-    let r = db.search(&SearchQuery { q: "inexistenta".into(), ..Default::default() }).unwrap();
+    let r = db
+        .search(&SearchQuery {
+            q: "inexistenta".into(),
+            ..Default::default()
+        })
+        .unwrap();
     assert_eq!(r.total, 0);
     assert_eq!(r.agenda_only.len(), 1);
     assert_eq!(r.agenda_only[0].category, Category::Puz);
     assert_eq!(r.agenda_only[0].beneficiary.as_deref(), Some("Popescu Ion"));
 
     // paginare
-    let r = db.search(&SearchQuery { limit: 1, offset: 1, ..Default::default() }).unwrap();
+    let r = db
+        .search(&SearchQuery {
+            limit: 1,
+            offset: 1,
+            ..Default::default()
+        })
+        .unwrap();
     assert_eq!(r.total, 2);
     assert_eq!(r.items.len(), 1);
 }
@@ -129,8 +168,17 @@ fn rewrite_is_idempotent_and_keeps_known_values() {
     assert_eq!(s.items, 2);
     assert_eq!(s.agenda_rows_unmatched, 1);
 
-    let r = db.search(&SearchQuery { q: "brancusi".into(), ..Default::default() }).unwrap();
-    assert_eq!(r.items[0].beneficiary.as_deref(), Some("Batiment Vert SRL"), "beneficiarul cunoscut se păstrează");
+    let r = db
+        .search(&SearchQuery {
+            q: "brancusi".into(),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(
+        r.items[0].beneficiary.as_deref(),
+        Some("Batiment Vert SRL"),
+        "beneficiarul cunoscut se păstrează"
+    );
     assert_eq!(r.items[0].documents.len(), 1, "documentele se păstrează");
 
     let meetings = db.list_meetings().unwrap();
@@ -149,7 +197,17 @@ fn sync_runs_are_recorded() {
     let (_dir, db) = open();
     assert!(db.status().unwrap().last_run.is_none());
     let id = db.start_sync_run().unwrap();
-    db.finish_sync_run(id, true, &RunCounts { meetings_seen: 20, meetings_updated: 3, items_new: 7 }, None).unwrap();
+    db.finish_sync_run(
+        id,
+        true,
+        &RunCounts {
+            meetings_seen: 20,
+            meetings_updated: 3,
+            items_new: 7,
+        },
+        None,
+    )
+    .unwrap();
     let run = db.status().unwrap().last_run.unwrap();
     assert!(run.ok);
     assert_eq!(run.meetings_seen, 20);

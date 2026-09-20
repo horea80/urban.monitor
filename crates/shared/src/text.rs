@@ -34,7 +34,11 @@ pub fn normalize(s: &str) -> String {
 }
 
 pub fn tokens(s: &str) -> Vec<String> {
-    normalize(s).split(' ').filter(|t| !t.is_empty()).map(str::to_owned).collect()
+    normalize(s)
+        .split(' ')
+        .filter(|t| !t.is_empty())
+        .map(str::to_owned)
+        .collect()
 }
 
 /// Clasificarea unui proiect după titlu (FR-2.2).
@@ -129,9 +133,28 @@ pub fn parse_time(text: &str) -> Option<String> {
 }
 
 const STREET_PREFIXES: [&str; 22] = [
-    "strada", "str", "calea", "bulevardul", "b-dul", "bdul", "bd", "blvd", "aleea", "piata",
-    "piața", "p-ta", "drumul", "drum", "splaiul", "soseaua", "șoseaua", "zona", "colonia",
-    "cartierul", "cartier", "intrarea",
+    "strada",
+    "str",
+    "calea",
+    "bulevardul",
+    "b-dul",
+    "bdul",
+    "bd",
+    "blvd",
+    "aleea",
+    "piata",
+    "piața",
+    "p-ta",
+    "drumul",
+    "drum",
+    "splaiul",
+    "soseaua",
+    "șoseaua",
+    "zona",
+    "colonia",
+    "cartierul",
+    "cartier",
+    "intrarea",
 ];
 
 /// Numele străzii din adresă, best-effort, cu majusculele originale:
@@ -144,10 +167,8 @@ pub fn street_of(address: &str) -> Option<String> {
         let mut cut = false;
         for p in STREET_PREFIXES {
             if let Some(rest) = lower.strip_prefix(p) {
-                let boundary = rest.is_empty()
-                    || rest.starts_with('.')
-                    || rest.starts_with(' ')
-                    || rest.starts_with(',');
+                let boundary =
+                    rest.is_empty() || rest.starts_with('.') || rest.starts_with(' ') || rest.starts_with(',');
                 if boundary {
                     let skip = p.len() + rest.chars().take_while(|c| *c == '.' || *c == ' ').count();
                     s = &s[byte_index(s, skip)..];
@@ -168,13 +189,18 @@ pub fn street_of(address: &str) -> Option<String> {
             break;
         }
         let rest = &s[i..];
-        if rest.starts_with(" nr") || rest.starts_with(" - ") || rest.starts_with(" – ") || rest.starts_with(" — ") {
+        if rest.starts_with(" nr") || rest.starts_with(" - ") || rest.starts_with(" – ") || rest.starts_with(" — ")
+        {
             end = i;
             break;
         }
     }
     let street = s[..end].trim().trim_end_matches(['.', ',', '-', '–']).trim();
-    if street.is_empty() { None } else { Some(street.to_owned()) }
+    if street.is_empty() {
+        None
+    } else {
+        Some(street.to_owned())
+    }
 }
 
 /// Indexul în bytes al celui de-al `n`-lea caracter.
@@ -196,21 +222,42 @@ mod tests {
 
     #[test]
     fn classify_titles() {
-        assert_eq!(classify("Studiu de oportunitate pentru inițiere P.U.Z"), Category::AvizOportunitate);
-        assert_eq!(classify("Studiu de oportunitate pentru initiere PUZ (Actualizare aviz de oportunitate nr. 130/2021)"), Category::AvizOportunitate);
+        assert_eq!(
+            classify("Studiu de oportunitate pentru inițiere P.U.Z"),
+            Category::AvizOportunitate
+        );
+        assert_eq!(
+            classify("Studiu de oportunitate pentru initiere PUZ (Actualizare aviz de oportunitate nr. 130/2021)"),
+            Category::AvizOportunitate
+        );
         assert_eq!(classify("P.U.Z de restructurare urbană"), Category::Puz);
-        assert_eq!(classify("PUZ parcelare și construire locuințe cu regim redus de înălțime"), Category::Puz);
+        assert_eq!(
+            classify("PUZ parcelare și construire locuințe cu regim redus de înălțime"),
+            Category::Puz
+        );
         assert_eq!(classify("P.U.D construire imobil mixt"), Category::Pud);
-        assert_eq!(classify("PUD desființare parcare și construire imobil mixt, amenajări exterioare"), Category::Pud);
+        assert_eq!(
+            classify("PUD desființare parcare și construire imobil mixt, amenajări exterioare"),
+            Category::Pud
+        );
         assert_eq!(classify("Concluziile ședinței"), Category::Altele);
         assert_eq!(classify("ANUNȚ PRIVIND DESFĂȘURAREA ȘEDINȚEI"), Category::Altele);
     }
 
     #[test]
     fn dates_and_times() {
-        assert_eq!(parse_ro_date("Ședința din 16 septembrie 2026"), NaiveDate::from_ymd_opt(2026, 9, 16));
-        assert_eq!(parse_ro_date("sedinta-din-2-aprilie-2026"), NaiveDate::from_ymd_opt(2026, 4, 2));
-        assert_eq!(parse_ro_date("https://x/sedinta-din-15-decembrie-2025/"), NaiveDate::from_ymd_opt(2025, 12, 15));
+        assert_eq!(
+            parse_ro_date("Ședința din 16 septembrie 2026"),
+            NaiveDate::from_ymd_opt(2026, 9, 16)
+        );
+        assert_eq!(
+            parse_ro_date("sedinta-din-2-aprilie-2026"),
+            NaiveDate::from_ymd_opt(2026, 4, 2)
+        );
+        assert_eq!(
+            parse_ro_date("https://x/sedinta-din-15-decembrie-2025/"),
+            NaiveDate::from_ymd_opt(2025, 12, 15)
+        );
         assert_eq!(parse_ro_date("fără dată"), None);
         assert_eq!(parse_time("Orele: 10.00"), Some("10:00".into()));
         assert_eq!(parse_time("ora 10:30 va avea loc"), Some("10:30".into()));
@@ -220,7 +267,10 @@ mod tests {
 
     #[test]
     fn streets() {
-        assert_eq!(street_of("str C-tin Brancusi nr 107-109").as_deref(), Some("C-tin Brancusi"));
+        assert_eq!(
+            street_of("str C-tin Brancusi nr 107-109").as_deref(),
+            Some("C-tin Brancusi")
+        );
         assert_eq!(street_of("str. Ceahlău nr. 60b").as_deref(), Some("Ceahlău"));
         assert_eq!(street_of("zona Triajului – sud").as_deref(), Some("Triajului"));
         assert_eq!(street_of("Calea Baciului nr. 1-3").as_deref(), Some("Baciului"));
@@ -229,7 +279,10 @@ mod tests {
         assert_eq!(street_of("zona str. Beclean").as_deref(), Some("Beclean"));
         assert_eq!(street_of("Baile Someseni").as_deref(), Some("Baile Someseni"));
         assert_eq!(street_of("str Frunzisului - nord").as_deref(), Some("Frunzisului"));
-        assert_eq!(street_of("str. Vidrei nr 6-8, str. Morii nr. 31g").as_deref(), Some("Vidrei"));
+        assert_eq!(
+            street_of("str. Vidrei nr 6-8, str. Morii nr. 31g").as_deref(),
+            Some("Vidrei")
+        );
         assert_eq!(street_of(""), None);
     }
 }
