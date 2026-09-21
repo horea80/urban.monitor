@@ -1,7 +1,7 @@
 //! Componente refolosite de pagini: cardul unui proiect, rândul de agendă fără proiect, insigna de
-//! categorie, subsolul cu data ultimei sincronizări.
+//! categorie, data ultimei sincronizări din antet, subsolul cu sursa.
 
-use chrono::{DateTime, Datelike, NaiveDate};
+use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use dioxus::prelude::*;
 use urban_shared::{AgendaRowView, Category, Item};
 
@@ -29,10 +29,14 @@ pub fn fmt_date(d: NaiveDate) -> String {
     format!("{} {} {}", d.day(), LUNI[d.month0() as usize], d.year())
 }
 
-/// Moment ISO 8601 → „20.09.2026, 20:14 UTC”; textul original dacă nu se poate parsa.
+/// Moment ISO 8601 (UTC) → „20.09.2026, 23:14” în ora României; textul original dacă nu se poate parsa.
 pub fn fmt_timestamp(iso: &str) -> String {
     DateTime::parse_from_rfc3339(iso)
-        .map(|t| t.format("%d.%m.%Y, %H:%M UTC").to_string())
+        .map(|t| {
+            urban_shared::time::to_romania_local(t.with_timezone(&Utc))
+                .format("%d.%m.%Y, %H:%M")
+                .to_string()
+        })
         .unwrap_or_else(|_| iso.to_owned())
 }
 
@@ -113,20 +117,27 @@ pub fn AgendaRowCard(row: AgendaRowView) -> Element {
     }
 }
 
+/// „Actualizat 21.09.2026, 14:22” în antet: ultima sincronizare reușită, în ora României.
 #[component]
-pub fn Footer() -> Element {
+pub fn LastUpdate() -> Element {
     let status = use_server_future(server_fns::status)?;
-    let updated = match status() {
+    let text = match status() {
         Some(Ok(s)) => match s.last_run.and_then(|r| r.finished_at) {
-            Some(t) => format!("Date actualizate la {}", fmt_timestamp(&t)),
+            Some(t) => format!("Actualizat {}", fmt_timestamp(&t)),
             None => "Nicio sincronizare încă".to_owned(),
         },
         _ => String::new(),
     };
     rsx! {
+        span { class: "updated", title: "Ultima sincronizare cu site-ul primăriei, ora României", "{text}" }
+    }
+}
+
+#[component]
+pub fn Footer() -> Element {
+    rsx! {
         footer {
             div { class: "inner",
-                span { "{updated}" }
                 a {
                     href: "https://primariaclujnapoca.ro/strategii-urbane/comisia-tehnica-de-amenajare-a-teritoriului-si-urbanism/sedinte-comisie/",
                     target: "_blank",

@@ -30,6 +30,10 @@ pub fn MeetingPage(id: i64) -> Element {
                 section { class: "meeting-head",
                     h1 { "Ședința CTATU din {date}" }
                     p { class: "muted",
+                        if d.meeting.upcoming {
+                            span { class: "tag upcoming", "programată" }
+                            " · "
+                        }
                         if let Some(t) = &d.meeting.time { "Ora {t} · " }
                         "{n_items} proiecte"
                         if n_rows > 0 { " · {n_rows} poziții pe ordinea de zi" }

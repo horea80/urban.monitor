@@ -10,7 +10,7 @@ mod home;
 mod meeting;
 mod meetings;
 
-use components::Footer;
+use components::{Footer, LastUpdate};
 use home::Home;
 use meeting::MeetingPage;
 use meetings::Meetings;
@@ -46,7 +46,7 @@ fn Shell() -> Element {
     rsx! {
         header { class: "site-header",
             div { class: "inner",
-                Link { class: "brand", to: Route::Home { params: SearchParams::default() }, "urban.monitor" }
+                Link { class: "brand", to: Route::Home { params: SearchParams::default() }, "Monitor Urban" }
                 span { class: "tagline",
                     "Ședințele Comisiei Tehnice de Urbanism (CTATU) Cluj-Napoca, căutare după stradă, beneficiar, titlu"
                 }
@@ -54,6 +54,7 @@ fn Shell() -> Element {
                     Link { to: Route::Home { params: SearchParams::default() }, active_class: "active", "Căutare" }
                     Link { to: Route::Meetings {}, active_class: "active", "Ședințe" }
                 }
+                LastUpdate {}
             }
         }
         main { Outlet::<Route> {} }

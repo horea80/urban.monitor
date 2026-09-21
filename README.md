@@ -88,7 +88,7 @@ just deploy-env                # .env.prod → /opt/urban/.env
 just deploy-server             # build local, artefacte → box, smoke test, instalare atomică, restart, /healthz
 ```
 
-`just build-cross` face doar build-ul pentru box, în `target/deploy/`; `just build-local` și `just run-local` construiesc și
+`just build-cross` face doar build-ul pentru box, în `target/deploy/` (implicit pe 8 nuclee; `BUILD_JOBS=32 just build-cross` pentru toate); `just build-local` și `just run-local` construiesc și
 pornesc pe stație același bundle de release (server.exe + public/), ca să vezi local exact ce rulează în producție. Loguri: `just logs`; accesul prin nginx în
 `/var/log/nginx/urban.access.log`. Backup: copia fișierului `/opt/urban/data/urban.db`. Rollback: pe box,
 `sudo mv /opt/urban/server.prev /opt/urban/server && sudo systemctl restart urban`.

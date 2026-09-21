@@ -83,6 +83,9 @@ pub struct Meeting {
     pub conclusions_pdf_url: Option<String>,
     pub announcement_url: Option<String>,
     pub item_count: i64,
+    /// Ședința e programată în viitor: data ei e după ziua curentă (calculat la citire, pe server).
+    #[serde(default)]
+    pub upcoming: bool,
 }
 
 /// Un document atașat unui proiect (parte scrisă, parte desenată, adresă).

@@ -17,6 +17,9 @@ pub fn Meetings() -> Element {
                     for m in ms.iter() {
                         li { key: "{m.id}",
                             Link { to: Route::MeetingPage { id: m.id }, "Ședința din {fmt_date(m.date)}" }
+                            if m.upcoming {
+                                span { class: "tag upcoming", "programată" }
+                            }
                             if let Some(t) = &m.time {
                                 span { class: "muted", "ora {t}" }
                             }

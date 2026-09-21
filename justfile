@@ -31,7 +31,7 @@ test:
 
 # ── release builds ────────────────────────────────────────────────────────────────────────────────
 
-# release bundle for THIS machine (server.exe + public/) → target/dx/urban-app/release/web; run it with `just run-local`
+# release bundle for THIS machine (server.exe + public/) → target/dx/urban-app/release/web; run it with `just run-local`; dx's tight profiles (fat LTO), slower than build-cross
 build-local:
     dx bundle --release --platform web -p urban-app
 

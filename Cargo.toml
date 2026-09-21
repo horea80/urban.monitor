@@ -50,7 +50,9 @@ codegen-units = 1
 opt-level = 3
 strip = true
 
-# wasm bundle size matters on mobile
+# wasm bundle size matters on mobile. dx construiește clientul sub `wasm-release` și serverul sub
+# `server-release` (moștenit din `release`); deploy/build.sh relaxează LTO și codegen-units pentru
+# ambele prin `--config`, ca build-ul de producție să dureze secunde (vezi acolo și ADR-0010).
 [profile.wasm-release]
 inherits = "release"
 opt-level = "z"

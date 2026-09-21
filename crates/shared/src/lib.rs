@@ -3,6 +3,7 @@
 
 pub mod model;
 pub mod text;
+pub mod time;
 
 pub use model::{
     AgendaRowView, Category, Document, Item, Meeting, MeetingDetail, SearchQuery, SearchResult, Status, StreetCount,

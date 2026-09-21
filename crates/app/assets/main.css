@@ -29,6 +29,7 @@ h2 { font-size: 1.15rem; margin: 1.75rem 0 .75rem; }
 .site-header nav { display: flex; gap: 1rem; }
 .site-header nav a { text-decoration: none; font-weight: 500; }
 .site-header nav a.active { text-decoration: underline; }
+.site-header .updated { color: var(--muted); font-size: .85rem; white-space: nowrap; }
 
 .search { display: grid; gap: .75rem; margin: 1.25rem 0; }
 .search .row { display: flex; gap: .5rem; }
@@ -56,6 +57,7 @@ h2 { font-size: 1.15rem; margin: 1.75rem 0 .75rem; }
 .badge-AVIZ_OPORTUNITATE { background: var(--aviz); }
 .badge-ALTELE { background: var(--altele); }
 .tag { display: inline-block; padding: .05rem .45rem; border-radius: .3rem; background: var(--warn-bg); color: var(--warn-fg); font-size: .8rem; font-weight: 600; }
+.tag.upcoming { background: #e3eef8; color: var(--accent); }
 
 .pager { display: flex; justify-content: space-between; margin: 1.25rem 0; }
 

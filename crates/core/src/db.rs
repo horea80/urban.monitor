@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use chrono::{NaiveDate, SecondsFormat, Utc};
+use chrono::{Local, NaiveDate, SecondsFormat, Utc};
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::types::Value;
@@ -229,16 +229,19 @@ const MEETING_SELECT: &str = "SELECT m.id, m.url, m.title, m.date, m.time, m.age
      FROM meetings m";
 
 fn row_to_meeting(r: &Row<'_>) -> rusqlite::Result<Meeting> {
+    let date = parse_date(&r.get::<_, String>(3)?);
     Ok(Meeting {
         id: r.get(0)?,
         url: r.get(1)?,
         title: r.get(2)?,
-        date: parse_date(&r.get::<_, String>(3)?),
+        date,
         time: r.get(4)?,
         agenda_url: r.get(5)?,
         conclusions_pdf_url: r.get(6)?,
         announcement_url: r.get(7)?,
         item_count: r.get(8)?,
+        // decis pe server, nu în browser, ca SSR-ul și hidratarea să vadă aceeași valoare
+        upcoming: date > Local::now().date_naive(),
     })
 }
 
