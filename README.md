@@ -11,13 +11,13 @@ Documentație: cerințe în [`docs/spec/requirements.md`](docs/spec/requirements
 ## Stack
 
 Rust (edition 2024) · Dioxus 0.7 fullstack · axum 0.8 · SQLite (rusqlite, FTS5) ·
-reqwest · scraper · pdf-extract · utoipa (OpenAPI) · systemd + Caddy pe VPS, fără Docker.
+reqwest · scraper · pdf-extract · utoipa (OpenAPI) · systemd + nginx (sau Caddy) pe VPS, fără Docker.
 
 ```
 crates/shared   tipuri + normalizare text (compilează și la wasm)
 crates/core     scraper, PDF, SQLite, sync, CLI `urban`
 crates/app      UI Dioxus + API JSON /api/v1 + OpenAPI
-deploy/         setup.sh, deploy.sh, deploy-env.sh, urban.service, urban.caddy
+deploy/         setup.sh, build.sh, deploy.sh, deploy-env.sh, urban.service, urban.nginx, urban.caddy
 ```
 
 ## Prerechizite (Windows)
@@ -26,11 +26,15 @@ deploy/         setup.sh, deploy.sh, deploy-env.sh, urban.service, urban.caddy
 winget install Rustlang.Rustup        # acceptă instalarea Visual Studio Build Tools când întreabă
 rustup target add wasm32-unknown-unknown
 cargo install dioxus-cli --locked     # binarul `dx`
+winget install Casey.Just             # `just`, comenzile proiectului (echivalentul scripturilor npm)
 ```
 
 `rust-toolchain.toml` fixează canalul stable și adaugă automat target-ul wasm.
 
 ## Dezvoltare
+
+Comenzile uzuale sunt în `justfile`; `just` fără argumente le listează (`just dev`, `just deploy-server`, …).
+Echivalentele directe:
 
 ```powershell
 cargo build --workspace                      # primul build compilează toate dependențele
@@ -51,24 +55,43 @@ Variabile de mediu (toate au valori implicite):
 | `URBAN_REQUEST_DELAY_MS` | `1000` | pauza între cereri către site-ul primăriei |
 | `IP` / `PORT` | `127.0.0.1` / `8080` | adresa serverului |
 
-## Deploy (VPS Oracle ARM, systemd + Caddy, fără Docker)
+## Deploy (box OCI ARM împrumutat, systemd + nginx, fără Docker)
 
-Box-ul e aarch64, deci build-ul de producție se face pe server ([ADR-0008](docs/adr/0008-deploy-fara-docker-systemd-caddy.md)).
+Producția rulează pe un box împrumutat (Oracle Cloud ARM Ampere, Ubuntu 24.04, aliasul ssh `emailbox`), la
+`https://horea.hopartean.com` ([ADR-0009](docs/adr/0009-gazduire-box-imprumutat-nginx.md)). Box-ul nu
+compilează nimic: build-ul se face pe stație, cu serverul cross-compilat pentru aarch64
+([ADR-0010](docs/adr/0010-build-pe-statie-cross-compilare-zig.md)). Porturile 80/443 le ține nginx-ul
+proprietarului; noi adăugăm doar un site, iar TLS-ul îl obține certbot.
 
-O singură dată, pe server, din directorul `deploy/` (după `scp -r deploy ubuntu@vps:` sau un clone):
-`./setup.sh` instalează rustup, `dx`, Caddy, utilizatorul `urban`, unitatea systemd și fișierul
-de site. Apoi pune domeniul real în `/etc/caddy/sites/urban.caddy` și `sudo systemctl reload caddy`.
+Unelte pe stație, o singură dată (pe lângă cele din Prerechizite):
 
-De pe stație (Git Bash), cu aliasul ssh din `~/.ssh/config` (implicit `millionphones`, vezi
+```powershell
+rustup target add aarch64-unknown-linux-gnu
+winget install zig.zig                  # compilator C și linker pentru cross-compilare
+cargo install cargo-zigbuild --locked
+```
+
+O singură dată, pentru server:
+
+1. DNS, în zona `hopartean.com`: `horea  A  161.153.121.17`.
+2. `just setup` (sau `scp -r deploy emailbox:` și `./setup.sh` din `deploy/`): utilizatorul `urban`, unitatea
+   systemd și site-ul nginx. Pe un box fără nginx (VPS-ul propriu) instalează Caddy și `urban.caddy`; atunci
+   pune domeniul acolo și `sudo systemctl reload caddy`.
+3. Când DNS-ul răspunde: `ssh emailbox 'sudo certbot --nginx -d horea.hopartean.com --redirect'`.
+
+Apoi, de pe stație (Git Bash sau PowerShell; ținta implicită e `emailbox`, vezi `DEPLOY_HOST`/`DEPLOY_KEY` în
 `deploy/deploy-common.sh`):
 
 ```bash
 cp .env.example .env.prod      # ajustează dacă e nevoie; .env.prod e ignorat de git
-./deploy/deploy-env.sh         # .env.prod → /opt/urban/.env
-./deploy/deploy.sh             # sursa → server, dx bundle --release acolo, instalare atomică, restart, /healthz
+just deploy-env                # .env.prod → /opt/urban/.env
+just deploy-server             # build local, artefacte → box, smoke test, instalare atomică, restart, /healthz
 ```
 
-Loguri: `ssh millionphones 'journalctl -u urban -f'`. Backup: copia fișierului `/opt/urban/data/urban.db`.
+`just build-cross` face doar build-ul pentru box, în `target/deploy/`; `just build-local` și `just run-local` construiesc și
+pornesc pe stație același bundle de release (server.exe + public/), ca să vezi local exact ce rulează în producție. Loguri: `just logs`; accesul prin nginx în
+`/var/log/nginx/urban.access.log`. Backup: copia fișierului `/opt/urban/data/urban.db`. Rollback: pe box,
+`sudo mv /opt/urban/server.prev /opt/urban/server && sudo systemctl restart urban`.
 
 ## API
 

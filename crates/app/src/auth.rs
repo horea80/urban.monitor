@@ -58,8 +58,8 @@ pub async fn identify(ConnectInfo(addr): ConnectInfo<SocketAddr>, mut req: Reque
     next.run(req).await
 }
 
-/// IP-ul real din spatele proxy-ului. Caddy setează `X-Forwarded-For`; serverul nu e expus direct
-/// (docker-compose doar `expose`), altfel antetul ar putea fi falsificat.
+/// IP-ul real din spatele proxy-ului. nginx/Caddy suprascriu `X-Forwarded-For` cu IP-ul clientului (nu
+/// îl completează), iar serverul ascultă doar pe 127.0.0.1; altfel antetul ar putea fi falsificat.
 fn forwarded_ip(headers: &HeaderMap) -> Option<IpAddr> {
     headers
         .get("x-forwarded-for")

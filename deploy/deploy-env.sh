@@ -11,7 +11,7 @@ cd "$(dirname "$0")/.."
 
 SRC=".env.prod"
 if [ ! -f "$SRC" ]; then
-  echo "▶ Nu există .env.prod; folosesc .env.example (valorile implicite)"
+  echo "▶ No .env.prod; using .env.example (defaults)"
   SRC=".env.example"
 fi
 
@@ -20,7 +20,7 @@ $SSH "$REMOTE" "sudo mkdir -p '$REMOTE_DIR' && sudo tee '$REMOTE_DIR/.env' >/dev
   && sudo chown $APP_USER:$APP_USER '$REMOTE_DIR/.env' && sudo chmod 0640 '$REMOTE_DIR/.env'" < "$SRC"
 
 if $SSH "$REMOTE" "systemctl is-active --quiet $SERVICE"; then
-  echo "▶ Repornesc $SERVICE ca să citească noul .env"
+  echo "▶ Restarting $SERVICE so it reads the new .env"
   $SSH "$REMOTE" "sudo systemctl restart $SERVICE"
 fi
-echo "✓ Configurație trimisă."
+echo "✓ Config sent."

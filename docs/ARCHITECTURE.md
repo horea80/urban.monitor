@@ -34,7 +34,7 @@ crates/app/                urban-app — Dioxus fullstack
   src/jobs.rs              sincronizare periodică, secvențială
   assets/main.css          stilurile, incluse prin asset!()
 
-deploy/                    setup.sh (provizionare), deploy.sh, deploy-env.sh, urban.service, urban.caddy
+deploy/                    setup.sh (provizionare), build.sh + cross/ (cross-compilare cu zig), deploy.sh, deploy-env.sh, urban.service, urban.nginx, urban.caddy
 .github/workflows/ci.yml   fmt, clippy, test, check wasm și server
 ```
 
