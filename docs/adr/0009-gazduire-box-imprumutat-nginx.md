@@ -40,6 +40,10 @@ acceptă `PROXY=` pentru a forța. Certificatul îl obține certbot după ce DNS
 implicit `emailbox`, cu cheia lui; VPS-ul propriu rămâne accesibil prin `DEPLOY_HOST`/`DEPLOY_KEY`.
 Build-ul rămâne pe server (ADR-0008); dacă încarcă prea mult box-ul, opțiunea 4 schimbă doar pasul de build.
 
+CSP-ul are nevoie și de `'unsafe-eval'`, nu doar de `'wasm-unsafe-eval'`: interpretorul web Dioxus își generează
+glue-ul JS la rulare cu `eval`; fără el, wasm-ul moare la hidratare și linkurile router-ului schimbă URL-ul fără
+să mai randeze nimic (prima versiune a site-ului a avut exact acest bug).
+
 O diferență față de Caddy: nginx completează implicit `X-Forwarded-For` (`$proxy_add_x_forwarded_for`),
 iar serverul limitează rata după primul IP din antet. Site-ul îl *suprascrie* cu `$remote_addr`, ca un
 client să nu poată falsifica IP-ul; nginx e singurul proxy din față.

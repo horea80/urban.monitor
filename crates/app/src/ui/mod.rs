@@ -48,7 +48,7 @@ fn Shell() -> Element {
             div { class: "inner",
                 Link { class: "brand", to: Route::Home { params: SearchParams::default() }, "urban.monitor" }
                 span { class: "tagline",
-                    "Ședințele Comisiei Tehnice de Urbanism (CTATU) Cluj-Napoca, căutare după stradă"
+                    "Ședințele Comisiei Tehnice de Urbanism (CTATU) Cluj-Napoca, căutare după stradă, beneficiar, titlu"
                 }
                 nav {
                     Link { to: Route::Home { params: SearchParams::default() }, active_class: "active", "Căutare" }

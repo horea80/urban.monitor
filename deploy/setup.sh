@@ -30,7 +30,12 @@ case "$PROXY" in
     # 80/443 sunt ale nginx-ului proprietarului: nu instalăm nimic, doar adăugăm un site. Certificatul îl
     # obține certbot (există pe box, cu plugin nginx) când DNS-ul arată aici — pasul 1 de la final.
     echo "proxy: nginx ($(nginx -v 2>&1))"
-    sudo cp urban.nginx /etc/nginx/sites-available/urban
+    # după `certbot --nginx`, fișierul instalat conține și blocurile TLS scrise de certbot; nu îl suprascriem
+    if sudo grep -qs "managed by Certbot" /etc/nginx/sites-available/urban; then
+      echo "site-ul nginx e deja gestionat de certbot; nu suprascriu /etc/nginx/sites-available/urban (compară manual cu urban.nginx)"
+    else
+      sudo cp urban.nginx /etc/nginx/sites-available/urban
+    fi
     sudo ln -sfn /etc/nginx/sites-available/urban /etc/nginx/sites-enabled/urban
     sudo nginx -t
     sudo systemctl reload nginx
