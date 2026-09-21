@@ -10,7 +10,6 @@ use crate::server_fns;
 pub fn Meetings() -> Element {
     let list = use_server_future(server_fns::list_meetings)?;
     rsx! {
-        document::Title { "Ședințe · urban.monitor" }
         h1 { "Ședințele comisiei" }
         match list() {
             Some(Ok(ms)) => rsx! {

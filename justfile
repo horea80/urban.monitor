@@ -64,4 +64,4 @@ logs:
 # unit status and the public /healthz
 status:
     ssh {{host}} 'systemctl status urban --no-pager -l | head -8'
-    curl -fsS https://horea.hopartean.com/healthz; echo
+    curl -fsS https://urbanism.hopartean.com/healthz; echo

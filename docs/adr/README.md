@@ -16,7 +16,7 @@ Statusuri: `proposed` · `accepted` · `rejected` · `deprecated` · `superseded
 | [0006](0006-fara-rss-in-v1.md) | Fără RSS în v1 | accepted | 2026-09-20 |
 | [0007](0007-pdf-extract-cu-fallback.md) | Extragere text PDF cu `pdf-extract` și fallback `pdftotext` | accepted | 2026-09-20 |
 | [0008](0008-deploy-fara-docker-systemd-caddy.md) | Deploy fără Docker: binar sub systemd, Caddy, build pe serverul ARM | superseded by 0010 | 2026-09-21 |
-| [0009](0009-gazduire-box-imprumutat-nginx.md) | Găzduire pe box împrumutat sub `horea.hopartean.com`: nginx + certbot în loc de Caddy | accepted | 2026-09-21 |
+| [0009](0009-gazduire-box-imprumutat-nginx.md) | Găzduire pe box împrumutat sub `urbanism.hopartean.com`: nginx + certbot în loc de Caddy | accepted | 2026-09-21 |
 | [0010](0010-build-pe-statie-cross-compilare-zig.md) | Build pe stație, serverul cross-compilat pentru aarch64 cu zig; box-ul primește doar binarul | accepted | 2026-09-21 |
 
 ## Cum adaugi o decizie

@@ -4,7 +4,7 @@ date: 2026-09-21
 decision-makers: horea
 ---
 
-# ADR-0009: Găzduire pe un box împrumutat, sub `horea.hopartean.com`, cu nginx și certbot în loc de Caddy
+# ADR-0009: Găzduire pe un box împrumutat, sub `urbanism.hopartean.com`, cu nginx și certbot în loc de Caddy
 
 ## Context și problemă
 
@@ -13,7 +13,10 @@ build pe server, reverse proxy cu TLS) presupunând VPS-ul propriu (`millionphon
 proxy-ul e Caddy. Serviciul va rula însă pe box-ul OCI ARM al unui prieten (aliasul ssh `emailbox`,
 Ubuntu 24.04 aarch64, 2 OCPU, 11 GB RAM), folosit în 2026 pentru staging-ul serviciului de email din
 oracle.gsl și curățat complet în septembrie. Box-ul găzduiește deja un serviciu public al proprietarului,
-cu nginx + certbot pe 80/443. Adresa noastră: `horea.hopartean.com`, subdomeniu al domeniului lui.
+cu nginx + certbot pe 80/443. Adresa noastră: `urbanism.hopartean.com`, subdomeniu al domeniului lui
+(inițial `urbanism.hopartean.com`, redenumit în aceeași zi). Înregistrarea DNS stă în Cloudflare, dar *fără*
+proxy (DNS only): cu proxy-ul pornit, nginx ar vedea IP-urile Cloudflare în loc de ale clienților (limitarea
+de rată e per IP), certificatul ar trebui emis altfel, iar modul SSL ar trebui să fie Full (strict).
 
 Întrebarea: cum aplicăm ADR-0008 pe un box unde 80/443 sunt deja ocupate de alt proxy?
 

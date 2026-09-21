@@ -11,7 +11,7 @@ set -euo pipefail
 
 APP_USER="urban"
 APP_DIR="/opt/urban"
-DOMAIN="horea.hopartean.com"   # același ca în urban.nginx
+DOMAIN="urbanism.hopartean.com"   # același ca în urban.nginx
 PROXY="${PROXY:-auto}"
 
 echo "=== urban.monitor: server setup ==="

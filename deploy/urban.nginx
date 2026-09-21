@@ -1,7 +1,7 @@
 # deploy/urban.nginx → /etc/nginx/sites-available/urban — site-ul urban.monitor pe box-ul cu nginx (ADR-0009).
 # Fișierul acoperă doar HTTP; TLS îl adaugă certbot, care rescrie blocul (listen 443 ssl, certificat,
 # redirect 80 → 443), după ce DNS-ul arată spre box:
-#     sudo certbot --nginx -d horea.hopartean.com --redirect
+#     sudo certbot --nginx -d urbanism.hopartean.com --redirect
 #
 # Compresie: nu aici; serverul comprimă singur (tower-http CompressionLayer) după Accept-Encoding, pe care
 # nginx îl trimite mai departe neschimbat.
@@ -9,7 +9,7 @@
 server {
     listen 80;
     listen [::]:80;
-    server_name horea.hopartean.com;
+    server_name urbanism.hopartean.com;
 
     access_log /var/log/nginx/urban.access.log;
     error_log  /var/log/nginx/urban.error.log;

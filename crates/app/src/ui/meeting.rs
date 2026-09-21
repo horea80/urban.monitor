@@ -18,7 +18,6 @@ pub fn MeetingPage(id: i64) -> Element {
             p { class: "error", "Nu am putut încărca ședința: {e}" }
         },
         Some(Ok(None)) => rsx! {
-            document::Title { "Ședință inexistentă · urban.monitor" }
             h1 { "Ședința nu există" }
             Link { to: Route::Meetings {}, "Toate ședințele" }
         },
@@ -28,7 +27,6 @@ pub fn MeetingPage(id: i64) -> Element {
             let n_rows = d.agenda_rows.len();
             let unmatched = d.agenda_rows.iter().filter(|r| r.item_id.is_none()).count();
             rsx! {
-                document::Title { "Ședința din {date} · urban.monitor" }
                 section { class: "meeting-head",
                     h1 { "Ședința CTATU din {date}" }
                     p { class: "muted",

@@ -14,16 +14,10 @@ use crate::server_fns;
 pub fn Home(params: SearchParams) -> Element {
     let results = use_server_future(use_reactive!(|params| server_fns::search(params.to_query())))?;
 
-    let title = if params.q.trim().is_empty() {
-        "urban.monitor · Ședințe CTATU Cluj-Napoca".to_owned()
-    } else {
-        format!("{} · urban.monitor", params.q.trim())
-    };
     let this_year = Utc::now().year().max(2026);
     let years: Vec<i32> = (2026..=this_year).rev().collect();
 
     rsx! {
-        document::Title { "{title}" }
         form { class: "search", method: "get", action: "/",
             div { class: "row",
                 input {

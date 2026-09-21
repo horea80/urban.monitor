@@ -58,7 +58,7 @@ Variabile de mediu (toate au valori implicite):
 ## Deploy (box OCI ARM împrumutat, systemd + nginx, fără Docker)
 
 Producția rulează pe un box împrumutat (Oracle Cloud ARM Ampere, Ubuntu 24.04, aliasul ssh `emailbox`), la
-`https://horea.hopartean.com` ([ADR-0009](docs/adr/0009-gazduire-box-imprumutat-nginx.md)). Box-ul nu
+`https://urbanism.hopartean.com` ([ADR-0009](docs/adr/0009-gazduire-box-imprumutat-nginx.md)). Box-ul nu
 compilează nimic: build-ul se face pe stație, cu serverul cross-compilat pentru aarch64
 ([ADR-0010](docs/adr/0010-build-pe-statie-cross-compilare-zig.md)). Porturile 80/443 le ține nginx-ul
 proprietarului; noi adăugăm doar un site, iar TLS-ul îl obține certbot.
@@ -73,11 +73,11 @@ cargo install cargo-zigbuild --locked
 
 O singură dată, pentru server:
 
-1. DNS, în zona `hopartean.com`: `horea  A  161.153.121.17`.
+1. DNS, în zona `hopartean.com`: `urbanism  A  161.153.121.17` (DNS only, fără proxy Cloudflare; vezi ADR-0009).
 2. `just setup` (sau `scp -r deploy emailbox:` și `./setup.sh` din `deploy/`): utilizatorul `urban`, unitatea
    systemd și site-ul nginx. Pe un box fără nginx (VPS-ul propriu) instalează Caddy și `urban.caddy`; atunci
    pune domeniul acolo și `sudo systemctl reload caddy`.
-3. Când DNS-ul răspunde: `ssh emailbox 'sudo certbot --nginx -d horea.hopartean.com --redirect'`.
+3. Când DNS-ul răspunde: `ssh emailbox 'sudo certbot --nginx -d urbanism.hopartean.com --redirect'`.
 
 Apoi, de pe stație (Git Bash sau PowerShell; ținta implicită e `emailbox`, vezi `DEPLOY_HOST`/`DEPLOY_KEY` în
 `deploy/deploy-common.sh`):
