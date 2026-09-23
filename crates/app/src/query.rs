@@ -31,6 +31,14 @@ impl SearchParams {
         SearchParams { offset, ..self.clone() }
     }
 
+    /// Căutarea unui text, fără filtre (linkul „vezi pe site” al unui cuvânt-cheie).
+    pub fn for_query(q: &str) -> Self {
+        SearchParams {
+            q: q.to_owned(),
+            ..Default::default()
+        }
+    }
+
     pub fn only_category(c: Category) -> Self {
         SearchParams {
             tip: vec![c],
@@ -125,5 +133,54 @@ mod tests {
         assert_eq!(s, "q=C%C3%A2mpului+12&tip=PUD");
         assert_eq!(SearchParams::from(s.as_str()), p);
         assert_eq!(SearchParams::default().to_string(), "");
+    }
+}
+
+/// Mesajele paginii /cont, aduse înapoi de rutele contului prin query string (FR-9).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct AccountParams {
+    pub ok: String,
+    pub eroare: String,
+}
+
+impl AccountParams {
+    pub fn ok_message(&self) -> Option<&'static str> {
+        match self.ok.as_str() {
+            "trimis" => {
+                Some("Dacă adresa e corectă, ai primit un email cu linkul de autentificare. E valabil 15 minute.")
+            }
+            "adaugat" => {
+                Some("Cuvântul-cheie a fost adăugat; primești un email la fiecare proiect nou care se potrivește.")
+            }
+            "sters" => Some("Contul a fost șters."),
+            _ => None,
+        }
+    }
+}
+
+impl From<&str> for AccountParams {
+    fn from(qs: &str) -> Self {
+        let mut p = AccountParams::default();
+        for (k, v) in form_urlencoded::parse(qs.trim_start_matches('?').as_bytes()) {
+            match &*k {
+                "ok" => p.ok = v.trim().to_owned(),
+                "eroare" => p.eroare = v.trim().chars().take(200).collect(),
+                _ => {}
+            }
+        }
+        p
+    }
+}
+
+impl fmt::Display for AccountParams {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut qs = form_urlencoded::Serializer::new(String::new());
+        if !self.ok.is_empty() {
+            qs.append_pair("ok", &self.ok);
+        }
+        if !self.eroare.is_empty() {
+            qs.append_pair("eroare", &self.eroare);
+        }
+        write!(f, "{}", qs.finish())
     }
 }

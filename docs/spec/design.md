@@ -161,7 +161,7 @@ Fixture-uri: `crates/core/tests/fixtures/`.
 
 ```sql
 meetings(id, url UNIQUE, title, date, time, agenda_url, agenda_text,
-         conclusions_pdf_url, announcement_url, first_seen_at, last_seen_at)
+         conclusions_pdf_url, announcement_url, first_seen_at, last_seen_at, alerted_at)  -- FR-8
 items(id, meeting_id → meetings, url UNIQUE, title, address, street, category,
       published_at, beneficiary, reg_number, reg_date, revenire, first_seen_at, last_seen_at)
 documents(id, item_id → items, label, url, UNIQUE(item_id, url))
@@ -169,6 +169,15 @@ agenda_rows(id, meeting_id → meetings, nr, reg_number, reg_date, beneficiary,
             description, revenire, item_id → items NULL)
 items_fts  -- FTS5, content=items: title, address, street, beneficiary, agenda_description (normalizate)
 sync_runs(id, started_at, finished_at, ok, meetings_seen, items_new, error)
+-- conturi (FR-9, ADR-0012); jetoanele doar ca hash SHA-256
+users(id, email UNIQUE, plan, credits_available, credits_used, cycle_start_at, cycle_end_at,
+      alerts_checked_until, consent_at, created_at, last_login_at)
+sessions(token_hash PK, user_id → users CASCADE, expires_at, created_at)
+magic_links(id, email, token_hash UNIQUE, consent, expires_at, used_at, created_at)
+keywords(id, user_id → users CASCADE, text, normalized, created_at, UNIQUE(user_id, normalized))
+credit_ledger(id, user_id → users CASCADE, direction, amount >= 0, reason, idempotency_key UNIQUE,
+              balance_after, created_at)
+alert_log(id, user_id → users CASCADE, kind, items, window_until, sent_at)
 -- rezervat, nu în v1:
 -- api_keys(id, key_hash, label, plan, created_at, revoked_at)
 ```

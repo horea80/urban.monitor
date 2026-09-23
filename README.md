@@ -33,6 +33,9 @@ winget install Casey.Just             # `just`, comenzile proiectului (echivalen
 
 ## Dezvoltare
 
+Pentru contul de utilizator (FR-9) local: `URBAN_PUBLIC_URL=http://127.0.0.1:8080` (cookie fără `Secure`); fără
+`RESEND_API_KEY`, linkul de autentificare apare în jurnalul serverului în loc să plece pe email.
+
 Comenzile uzuale sunt în `justfile`; `just` fără argumente le listează (`just dev`, `just deploy-server`, …).
 Echivalentele directe:
 
@@ -54,6 +57,13 @@ Variabile de mediu (toate au valori implicite):
 | `URBAN_SYNC_HOURS` | `6` | intervalul task-ului de sync din server |
 | `URBAN_REQUEST_DELAY_MS` | `1000` | pauza între cereri către site-ul primăriei |
 | `IP` / `PORT` | `127.0.0.1` / `8080` | adresa serverului |
+| `RESEND_API_KEY` | gol | cheia Resend pentru alertele pe email (FR-8); gol = alerte oprite |
+| `ALERT_FROM` | `Monitor Urban <noreply@hopartean.com>` | expeditorul, la un domeniu verificat în Resend |
+| `ALERT_TO` | `horea.hopartean@gmail.com` | destinatarii alertelor, separați prin virgulă |
+| `URBAN_PUBLIC_URL` | `https://urbanism.hopartean.com` | adresa publică, pentru linkurile din alerte |
+
+Alertele se verifică cu `cargo run -p urban-core --bin urban -- notify --test`, care trimite un email de probă cu
+configurația din mediu.
 
 ## Deploy (box OCI ARM împrumutat, systemd + nginx, fără Docker)
 
@@ -92,6 +102,12 @@ just deploy-server             # build local, artefacte → box, smoke test, ins
 pornesc pe stație același bundle de release (server.exe + public/), ca să vezi local exact ce rulează în producție. Loguri: `just logs`; accesul prin nginx în
 `/var/log/nginx/urban.access.log`. Backup: copia fișierului `/opt/urban/data/urban.db`. Rollback: pe box,
 `sudo mv /opt/urban/server.prev /opt/urban/server && sudo systemctl restart urban`.
+
+## Conturi și alerte pe cuvinte-cheie
+
+La `/cont`: autentificare doar cu email (link valabil 15 minute), cuvinte-cheie urmărite, credite. Planul gratuit
+dă 2 credite pe an; un credit = un cuvânt-cheie ținut un an, cu alerte nelimitate pe email la proiectele noi care se
+potrivesc ([ADR-0012](docs/adr/0012-conturi-credite-cuvinte-cheie.md)). `/confidentialitate` spune ce stocăm.
 
 ## API
 

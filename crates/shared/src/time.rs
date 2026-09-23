@@ -5,6 +5,26 @@
 
 use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveDateTime, Utc};
 
+const LUNI: [&str; 12] = [
+    "ianuarie",
+    "februarie",
+    "martie",
+    "aprilie",
+    "mai",
+    "iunie",
+    "iulie",
+    "august",
+    "septembrie",
+    "octombrie",
+    "noiembrie",
+    "decembrie",
+];
+
+/// „16 septembrie 2026”
+pub fn fmt_date_ro(d: NaiveDate) -> String {
+    format!("{} {} {}", d.day(), LUNI[d.month0() as usize], d.year())
+}
+
 fn last_sunday(year: i32, month: u32) -> NaiveDate {
     let first_of_next = if month == 12 {
         NaiveDate::from_ymd_opt(year + 1, 1, 1)

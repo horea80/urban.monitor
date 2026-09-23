@@ -90,8 +90,72 @@ CREATE TABLE sync_runs (
 );
 "#;
 
+// FR-8: când a plecat alerta pentru ședință (NULL = încă nu)
+const SCHEMA_V2: &str = "ALTER TABLE meetings ADD COLUMN alerted_at TEXT;";
+
+// FR-9: conturi, sesiuni (doar hash-uri), linkuri de autentificare, cuvinte-cheie, credite (ADR-0012)
+const SCHEMA_V3: &str = r#"
+CREATE TABLE users (
+  id                   INTEGER PRIMARY KEY,
+  email                TEXT NOT NULL UNIQUE,
+  plan                 TEXT NOT NULL DEFAULT 'free',
+  credits_available    INTEGER NOT NULL DEFAULT 0,
+  credits_used         INTEGER NOT NULL DEFAULT 0,
+  cycle_start_at       TEXT NOT NULL,
+  cycle_end_at         TEXT NOT NULL,
+  alerts_checked_until TEXT NOT NULL,
+  consent_at           TEXT NOT NULL,
+  created_at           TEXT NOT NULL,
+  last_login_at        TEXT
+);
+CREATE TABLE sessions (
+  token_hash  TEXT PRIMARY KEY,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at  TEXT NOT NULL,
+  created_at  TEXT NOT NULL
+);
+CREATE INDEX sessions_user ON sessions(user_id);
+CREATE TABLE magic_links (
+  id          INTEGER PRIMARY KEY,
+  email       TEXT NOT NULL,
+  token_hash  TEXT NOT NULL UNIQUE,
+  consent     INTEGER NOT NULL DEFAULT 0,
+  expires_at  TEXT NOT NULL,
+  used_at     TEXT,
+  created_at  TEXT NOT NULL
+);
+CREATE INDEX magic_links_email ON magic_links(email, created_at);
+CREATE TABLE keywords (
+  id          INTEGER PRIMARY KEY,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  text        TEXT NOT NULL,
+  normalized  TEXT NOT NULL,
+  created_at  TEXT NOT NULL,
+  UNIQUE(user_id, normalized)
+);
+CREATE TABLE credit_ledger (
+  id              INTEGER PRIMARY KEY,
+  user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  direction       TEXT NOT NULL CHECK (direction IN ('credit','debit')),
+  amount          INTEGER NOT NULL CHECK (amount >= 0),
+  reason          TEXT NOT NULL,
+  idempotency_key TEXT UNIQUE,
+  balance_after   INTEGER NOT NULL,
+  created_at      TEXT NOT NULL
+);
+CREATE INDEX credit_ledger_user ON credit_ledger(user_id);
+CREATE TABLE alert_log (
+  id           INTEGER PRIMARY KEY,
+  user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind         TEXT NOT NULL CHECK (kind IN ('digest','teaser')),
+  items        INTEGER NOT NULL,
+  window_until TEXT NOT NULL,
+  sent_at      TEXT NOT NULL
+);
+"#;
+
 fn migrations() -> Migrations<'static> {
-    Migrations::new(vec![M::up(SCHEMA_V1)])
+    Migrations::new(vec![M::up(SCHEMA_V1), M::up(SCHEMA_V2), M::up(SCHEMA_V3)])
 }
 
 pub type Conn = PooledConnection<SqliteConnectionManager>;
@@ -177,7 +241,7 @@ pub struct RunCounts {
     pub items_new: usize,
 }
 
-fn now_iso() -> String {
+pub fn now_iso() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
 }
 
@@ -618,10 +682,43 @@ impl Db {
         })
     }
 
+    /// Proiectele apărute după `since` (`first_seen_at`, ISO) care se potrivesc interogării FTS (FR-9).
+    pub fn new_items_matching(&self, fts: &str, since: &str) -> Result<Vec<Item>> {
+        let conn = self.conn()?;
+        let sql = format!(
+            "{ITEM_SELECT} WHERE i.first_seen_at > ?1 \n             AND i.id IN (SELECT item_id FROM items_fts WHERE items_fts MATCH ?2) \n             ORDER BY m.date DESC, i.id ASC LIMIT 200"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        Ok(stmt
+            .query_map(params![since, fts], row_to_item)?
+            .collect::<rusqlite::Result<_>>()?)
+    }
+
     pub fn list_meetings(&self) -> Result<Vec<Meeting>> {
         let conn = self.conn()?;
         let mut stmt = conn.prepare(&format!("{MEETING_SELECT} ORDER BY m.date DESC"))?;
         Ok(stmt.query_map([], row_to_meeting)?.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Ședințele cu data ≥ `from` pentru care nu s-a trimis încă alerta (FR-8), cele mai apropiate întâi.
+    pub fn meetings_to_alert(&self, from: NaiveDate) -> Result<Vec<Meeting>> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare(&format!(
+            "{MEETING_SELECT} WHERE m.alerted_at IS NULL AND m.date >= ?1 ORDER BY m.date ASC, m.id ASC"
+        ))?;
+        Ok(stmt
+            .query_map(params![from.to_string()], row_to_meeting)?
+            .collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Marchează ședințele ca alertate, după ce emailul a plecat.
+    pub fn mark_alerted(&self, ids: &[i64]) -> Result<()> {
+        let conn = self.conn()?;
+        let now = now_iso();
+        for id in ids {
+            conn.execute("UPDATE meetings SET alerted_at = ?1 WHERE id = ?2", params![now, id])?;
+        }
+        Ok(())
     }
 
     pub fn get_meeting(&self, id: i64) -> Result<Option<Meeting>> {
@@ -760,6 +857,32 @@ fn attach_documents(conn: &Connection, items: &mut [Item]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn alertele_se_trimit_o_singura_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = Db::open(&dir.path().join("t.db")).unwrap();
+        let date = NaiveDate::from_ymd_opt(2026, 9, 30).unwrap();
+        db.write_meeting(&MeetingWrite {
+            url: "https://x/sedinta".into(),
+            title: "S".into(),
+            date,
+            time: None,
+            agenda_url: None,
+            agenda_text: None,
+            conclusions_pdf_url: None,
+            announcement_url: None,
+            items: vec![],
+            agenda_rows: None,
+        })
+        .unwrap();
+        let pending = db.meetings_to_alert(date).unwrap();
+        assert_eq!(pending.len(), 1);
+        // o ședință din trecut nu se alertează
+        assert!(db.meetings_to_alert(date.succ_opt().unwrap()).unwrap().is_empty());
+        db.mark_alerted(&[pending[0].id]).unwrap();
+        assert!(db.meetings_to_alert(date).unwrap().is_empty());
+    }
 
     #[test]
     fn fts_query_builds_prefix_terms() {

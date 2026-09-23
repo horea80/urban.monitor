@@ -1,7 +1,7 @@
 //! Componente refolosite de pagini: cardul unui proiect, rândul de agendă fără proiect, insigna de
 //! categorie, data ultimei sincronizări din antet, subsolul cu sursa.
 
-use chrono::{DateTime, Datelike, NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use dioxus::prelude::*;
 use urban_shared::{AgendaRowView, Category, Item};
 
@@ -9,24 +9,9 @@ use super::Route;
 use crate::query::SearchParams;
 use crate::server_fns;
 
-const LUNI: [&str; 12] = [
-    "ianuarie",
-    "februarie",
-    "martie",
-    "aprilie",
-    "mai",
-    "iunie",
-    "iulie",
-    "august",
-    "septembrie",
-    "octombrie",
-    "noiembrie",
-    "decembrie",
-];
-
 /// „16 septembrie 2026”
 pub fn fmt_date(d: NaiveDate) -> String {
-    format!("{} {} {}", d.day(), LUNI[d.month0() as usize], d.year())
+    urban_shared::time::fmt_date_ro(d)
 }
 
 /// Moment ISO 8601 (UTC) → „20.09.2026, 23:14” în ora României; textul original dacă nu se poate parsa.
@@ -82,11 +67,10 @@ pub fn ItemCard(item: Item) -> Element {
             } else if let Some(b) = &item.beneficiary {
                 p { class: "beneficiary", "{b}" }
             }
-            if !item.documents.is_empty() {
-                div { class: "docs",
-                    for d in item.documents.iter() {
-                        a { href: "{d.url}", target: "_blank", rel: "noopener", "{d.label}" }
-                    }
+            div { class: "docs",
+                a { class: "project-link", href: "{item.url}", target: "_blank", rel: "noopener", "Pagina proiectului ↗" }
+                for d in item.documents.iter() {
+                    a { href: "{d.url}", target: "_blank", rel: "noopener", "{d.label}" }
                 }
             }
         }

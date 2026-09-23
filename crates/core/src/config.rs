@@ -18,6 +18,29 @@ pub struct Config {
     pub sync_interval: Duration,
     pub user_agent: String,
     pub listing_url: String,
+    /// Adresa publică a site-ului, pentru linkurile din alerte.
+    pub public_url: String,
+    /// Alerte pe email la ședințe noi (FR-8); `None` când lipsește `RESEND_API_KEY`.
+    pub alert: Option<AlertConfig>,
+}
+
+/// Trimiterea alertelor prin Resend (ADR-0011).
+#[derive(Clone)]
+pub struct AlertConfig {
+    pub resend_api_key: String,
+    /// „Monitor Urban <noreply@hopartean.com>”; domeniul trebuie verificat în Resend.
+    pub from: String,
+    pub to: Vec<String>,
+}
+
+impl std::fmt::Debug for AlertConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AlertConfig")
+            .field("resend_api_key", &"***")
+            .field("from", &self.from)
+            .field("to", &self.to)
+            .finish()
+    }
 }
 
 impl Config {
@@ -36,6 +59,22 @@ impl Config {
                 "urban-monitor/0.1 (monitorizare publica a sedintelor CTATU Cluj-Napoca; uz personal)",
             ),
             listing_url: env_or("URBAN_LISTING_URL", Self::LISTING_URL),
+            public_url: env_or("URBAN_PUBLIC_URL", "https://urbanism.hopartean.com")
+                .trim_end_matches('/')
+                .to_owned(),
+            alert: std::env::var("RESEND_API_KEY")
+                .ok()
+                .map(|k| k.trim().to_owned())
+                .filter(|k| !k.is_empty())
+                .map(|key| AlertConfig {
+                    resend_api_key: key,
+                    from: env_or("ALERT_FROM", "Monitor Urban <noreply@hopartean.com>"),
+                    to: env_or("ALERT_TO", "horea.hopartean@gmail.com")
+                        .split(',')
+                        .map(|s| s.trim().to_owned())
+                        .filter(|s| !s.is_empty())
+                        .collect(),
+                }),
         }
     }
 

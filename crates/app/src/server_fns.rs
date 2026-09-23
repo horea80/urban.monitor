@@ -2,7 +2,7 @@
 //! ajung aici prin cererile generate de Dioxus. Interogările SQLite rulează în `spawn_blocking`.
 
 use dioxus::prelude::*;
-use urban_shared::{Meeting, MeetingDetail, SearchQuery, SearchResult, Status};
+use urban_shared::{AccountView, Meeting, MeetingDetail, SearchQuery, SearchResult, Status};
 
 #[cfg(feature = "server")]
 async fn blocking<T, F>(f: F) -> ServerFnResult<T>
@@ -45,4 +45,31 @@ pub async fn meeting_detail(id: i64) -> ServerFnResult<Option<MeetingDetail>> {
 #[server]
 pub async fn status() -> ServerFnResult<Status> {
     blocking(|db| db.status()).await
+}
+
+/// Contul autentificat prin cookie-ul de sesiune, sau `None` pentru vizitatori (FR-9).
+#[server]
+pub async fn me() -> ServerFnResult<Option<AccountView>> {
+    let headers: axum::http::HeaderMap = dioxus::fullstack::FullstackContext::extract().await?;
+    let Some(user) = crate::account::current_user(&headers).await else {
+        return Ok(None);
+    };
+    let view = blocking(move |db| {
+        use urban_shared::KeywordView;
+        let keywords = db
+            .keywords(user.id)?
+            .into_iter()
+            .map(|k| KeywordView { id: k.id, text: k.text })
+            .collect();
+        Ok(AccountView {
+            email: user.email.clone(),
+            plan: user.plan.clone(),
+            credits_balance: user.balance(),
+            credits_per_year: urban_core::accounts::FREE_CREDITS_PER_YEAR,
+            cycle_end: user.cycle_end_date(),
+            keywords,
+        })
+    })
+    .await?;
+    Ok(Some(view))
 }

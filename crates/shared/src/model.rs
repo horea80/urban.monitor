@@ -218,6 +218,23 @@ pub struct Status {
     pub last_run: Option<SyncRun>,
 }
 
+/// Contul văzut din pagina /cont (FR-9): ce trebuie afișat, nimic din ce nu trebuie să ajungă în browser.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AccountView {
+    pub email: String,
+    pub plan: String,
+    pub credits_balance: i64,
+    pub credits_per_year: i64,
+    pub cycle_end: NaiveDate,
+    pub keywords: Vec<KeywordView>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct KeywordView {
+    pub id: i64,
+    pub text: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

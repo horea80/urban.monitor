@@ -3,17 +3,21 @@
 
 use dioxus::prelude::*;
 
-use crate::query::SearchParams;
+use crate::query::{AccountParams, SearchParams};
 
+mod account;
 mod components;
 mod home;
 mod meeting;
 mod meetings;
+mod privacy;
 
+use account::Account;
 use components::{Footer, LastUpdate};
 use home::Home;
 use meeting::MeetingPage;
 use meetings::Meetings;
+use privacy::Privacy;
 
 #[derive(Routable, Clone, PartialEq, Debug)]
 #[rustfmt::skip]
@@ -25,6 +29,10 @@ pub enum Route {
         Meetings {},
         #[route("/sedinte/:id")]
         MeetingPage { id: i64 },
+        #[route("/cont?:..params")]
+        Account { params: AccountParams },
+        #[route("/confidentialitate")]
+        Privacy {},
     #[end_layout]
     #[route("/:..segments")]
     NotFound { segments: Vec<String> },
@@ -53,6 +61,7 @@ fn Shell() -> Element {
                 nav {
                     Link { to: Route::Home { params: SearchParams::default() }, active_class: "active", "Căutare" }
                     Link { to: Route::Meetings {}, active_class: "active", "Ședințe" }
+                    Link { to: Route::Account { params: AccountParams::default() }, active_class: "active", "Alerte" }
                 }
                 LastUpdate {}
             }

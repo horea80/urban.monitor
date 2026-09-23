@@ -18,6 +18,8 @@ Statusuri: `proposed` · `accepted` · `rejected` · `deprecated` · `superseded
 | [0008](0008-deploy-fara-docker-systemd-caddy.md) | Deploy fără Docker: binar sub systemd, Caddy, build pe serverul ARM | superseded by 0010 | 2026-09-21 |
 | [0009](0009-gazduire-box-imprumutat-nginx.md) | Găzduire pe box împrumutat sub `urbanism.hopartean.com`: nginx + certbot în loc de Caddy | accepted | 2026-09-21 |
 | [0010](0010-build-pe-statie-cross-compilare-zig.md) | Build pe stație, serverul cross-compilat pentru aarch64 cu zig; box-ul primește doar binarul | accepted | 2026-09-21 |
+| [0011](0011-alerte-email-resend.md) | Alerte pe email la ședințe noi prin Resend, listă fixă, starea în bază | accepted | 2026-09-21 |
+| [0012](0012-conturi-credite-cuvinte-cheie.md) | Conturi fără parolă, un credit = un cuvânt-cheie pe an, planul gratuit cu 2 credite | accepted | 2026-09-21 |
 
 ## Cum adaugi o decizie
 

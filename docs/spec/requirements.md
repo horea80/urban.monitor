@@ -121,6 +121,32 @@ Sursa unică de date: pagina publică
 - FR-7.4 Dacă o ședință procesată nu are niciun proiect, sistemul trebuie să înregistreze un
   avertisment (semnal că structura site-ului s-a schimbat).
 
+### FR-8 Alerte
+
+- FR-8.1 După fiecare sincronizare, serverul trimite un email cu ședințele nou apărute care au data
+  de azi sau din viitor: data, ora, numărul de proiecte de pe ordinea de zi și linkurile către pagina
+  noastră și către pagina primăriei. Ședințele din trecut nu se alertează.
+- FR-8.2 Destinatarii sunt o listă fixă din configurare (`ALERT_TO`, separată prin virgulă); v1 are
+  un singur destinatar. Trimiterea se face prin Resend ([ADR-0011](../adr/0011-alerte-email-resend.md)).
+- FR-8.3 O ședință e alertată o singură dată; starea se ține în bază (`meetings.alerted_at`). Dacă
+  trimiterea eșuează, se reîncearcă la sincronizarea următoare; alerta întârzie, nu se pierde.
+- FR-8.4 Fără cheie de API, alertele sunt oprite și serverul funcționează normal. `urban notify --test`
+  trimite un email de probă cu configurația curentă.
+
+### FR-9 Conturi și alerte pe cuvinte-cheie
+
+- FR-9.1 Oricine își poate face cont doar cu adresa de email: primește un link de autentificare valabil 15 minute,
+  o singură dată; fără parolă. Sesiunea ține 30 de zile. Contul nou cere acordul explicit pentru folosirea
+  adresei; contul se poate șterge oricând, cu tot ce ține de el.
+- FR-9.2 Utilizatorul adaugă cuvinte-cheie (o stradă, un cartier, un beneficiar; 3–60 de caractere, cel mult
+  5 cuvinte). După fiecare sincronizare primește un email cu proiectele noi care se potrivesc, cu aceeași
+  potrivire ca căutarea de pe site, grupate pe cuvânt, cu linkuri către ședință și către proiect.
+- FR-9.3 Un credit = un cuvânt-cheie ținut un an, cu alerte nelimitate. Planul gratuit (singurul în v1) dă
+  2 credite pe an; creditul se consumă la adăugare, nu se recuperează la ștergere, iar la reînnoirea
+  ciclului anual cuvintele păstrate se reînnoiesc din creditele noi ([ADR-0012](../adr/0012-conturi-credite-cuvinte-cheie.md)).
+- FR-9.4 Pagina contului arată creditele rămase, data reînnoirii și cuvintele; toate acțiunile merg și fără wasm.
+  Pagina de confidențialitate spune ce se stochează și de ce.
+
 ## 4. Cerințe nefuncționale
 
 - **NFR-1 Politețe față de sursă.** Cel mult o cerere pe secundă către site-ul primăriei,
@@ -151,7 +177,7 @@ Explicit amânate, cu decizii înregistrate în ADR-uri acolo unde e cazul:
 
 - autentificare cu chei API și cote de utilizare (pregătit, neactivat)
 - feed RSS/Atom ([ADR-0006](../adr/0006-fara-rss-in-v1.md))
-- notificări pe email sau Telegram pentru străzi urmărite
+- planuri plătite (mai multe credite, SMS) și notificări pe Telegram; v1 are doar planul gratuit din FR-9 și lista fixă din FR-8
 - OCR pe PDF-urile scanate cu concluziile ședinței
 - gruparea aparițiilor repetate ale aceluiași proiect în „dosare”
 - hartă cu proiectele

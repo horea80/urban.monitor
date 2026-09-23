@@ -1,4 +1,5 @@
-//! CLI (FR-6): `urban sync [--full]`, `urban search <text> [--tip ...] [--an ...]`, `urban meetings`, `urban status`.
+//! CLI (FR-6): `urban sync [--full]`, `urban search <text> [--tip ...] [--an ...]`, `urban meetings`, `urban status`,
+//! `urban notify [--test]`.
 //! Serverul web este crate-ul `urban-app`.
 
 use clap::{Parser, Subcommand};
@@ -6,6 +7,7 @@ use tracing_subscriber::EnvFilter;
 
 use urban_core::Config;
 use urban_core::db::Db;
+use urban_core::notify::Mailer;
 use urban_core::pdf::Chain;
 use urban_core::scrape::Client;
 use urban_core::shared::{Category, SearchQuery};
@@ -50,6 +52,11 @@ enum Cmd {
     Meetings,
     /// Contoare și ultima sincronizare
     Status,
+    /// Trimite alerta pe email pentru ședințele noi (FR-8); cu --test, doar un email de probă
+    Notify {
+        #[arg(long)]
+        test: bool,
+    },
 }
 
 #[tokio::main]
@@ -64,6 +71,18 @@ async fn main() -> anyhow::Result<()> {
     let db = Db::open(&cfg.db_path())?;
 
     match cli.cmd {
+        Cmd::Notify { test } => {
+            let Some(mailer) = Mailer::from_config(&cfg)? else {
+                anyhow::bail!("RESEND_API_KEY lipsește; alertele sunt oprite");
+            };
+            if test {
+                mailer.send_test().await?;
+                println!("email de probă trimis către {}", mailer.recipients().join(", "));
+            } else {
+                let n = mailer.alert_new_meetings(&db).await?;
+                println!("{n} ședințe alertate");
+            }
+        }
         Cmd::Sync { full } => {
             let client = Client::new(&cfg)?;
             let pdf = Chain::default_chain();

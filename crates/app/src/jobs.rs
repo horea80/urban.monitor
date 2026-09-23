@@ -1,10 +1,12 @@
 //! Sincronizarea periodică (FR-7.1): un singur task, rulările sunt strict secvențiale, deci nu pot
-//! porni două în paralel. Intervalul vine din `URBAN_SYNC_HOURS`; `0` oprește task-ul.
+//! porni două în paralel. Intervalul vine din `URBAN_SYNC_HOURS`; `0` oprește task-ul. După fiecare
+//! rulare pleacă alertele: ședințele noi către lista fixă (FR-8) și rezumatele pe cuvinte-cheie (FR-9).
 
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use tracing::{error, info, warn};
+use urban_core::notify::Mailer;
 use urban_core::pdf::Chain;
 use urban_core::scrape::Client;
 use urban_core::sync::{self, SyncOptions};
@@ -28,7 +30,6 @@ pub fn spawn(state: &'static AppState) {
         }
     };
     let pdf = Chain::default_chain();
-
     tokio::spawn(async move {
         info!(
             interval_h = interval.as_secs_f64() / 3600.0,
@@ -36,13 +37,13 @@ pub fn spawn(state: &'static AppState) {
         );
         tokio::time::sleep(INITIAL_DELAY).await;
         loop {
-            run_once(state, &client, &pdf).await;
+            run_once(state, &client, &pdf, state.mailer.as_ref()).await;
             tokio::time::sleep(interval).await;
         }
     });
 }
 
-async fn run_once(state: &'static AppState, client: &Client, pdf: &Chain) {
+async fn run_once(state: &'static AppState, client: &Client, pdf: &Chain, mailer: Option<&Mailer>) {
     if state.sync_running.swap(true, Ordering::SeqCst) {
         warn!("o sincronizare este deja în curs; sar peste această rundă");
         return;
@@ -61,4 +62,24 @@ async fn run_once(state: &'static AppState, client: &Client, pdf: &Chain) {
         Err(e) => error!(error = %e, secs = started.elapsed().as_secs(), "sincronizarea a eșuat"),
     }
     state.sync_running.store(false, Ordering::SeqCst);
+
+    // FR-8: alertele pleacă după sincronizare; un eșec se reîncearcă la rularea următoare
+    if let Some(m) = mailer {
+        match m.alert_new_meetings(&state.db).await {
+            Ok(0) => {}
+            Ok(n) => info!(n, "alertă trimisă pentru ședințe noi"),
+            Err(e) => error!(error = %e, "alerta pe email a eșuat; reîncerc la următoarea sincronizare"),
+        }
+        match urban_core::alerts::run_keyword_alerts(&state.db, m).await {
+            Ok(st) if st.emails > 0 || st.errors > 0 => info!(
+                users = st.users,
+                emails = st.emails,
+                items = st.items,
+                errors = st.errors,
+                "alerte pe cuvinte-cheie"
+            ),
+            Ok(_) => {}
+            Err(e) => error!(error = %e, "alertele pe cuvinte-cheie au eșuat"),
+        }
+    }
 }

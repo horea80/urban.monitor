@@ -16,7 +16,7 @@ use tracing_subscriber::EnvFilter;
 use urban_core::Config;
 use urban_core::db::Db;
 
-use crate::{api, jobs, state, ui};
+use crate::{account, api, jobs, state, ui};
 
 pub fn main() {
     tracing_subscriber::fmt()
@@ -47,6 +47,7 @@ async fn run() -> anyhow::Result<()> {
         .route("/healthz", get(healthz))
         .nest("/api/v1", api_router)
         .merge(api::docs_router(openapi))
+        .merge(account::router())
         .merge(ui_router())
         .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http());
