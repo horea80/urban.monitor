@@ -441,6 +441,19 @@ impl Db {
         Ok(r)
     }
 
+    /// Textul ordinii de zi deja stocat, ca rândurile să poată fi repotrivite fără re-descărcare.
+    pub fn agenda_text(&self, meeting_id: i64) -> Result<Option<String>> {
+        let conn = self.conn()?;
+        let t: Option<Option<String>> = conn
+            .query_row(
+                "SELECT agenda_text FROM meetings WHERE id = ?1",
+                params![meeting_id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        Ok(t.flatten())
+    }
+
     pub fn item_summaries(&self, urls: &[String]) -> Result<HashMap<String, ItemSummary>> {
         let conn = self.conn()?;
         let mut stmt = conn.prepare("SELECT id, docs_fetched FROM items WHERE url = ?1")?;

@@ -148,6 +148,9 @@ async fn process_meeting(
                 },
                 Err(e) => warnings.push(format!("{agenda_url}: descărcare eșuată: {e}")),
             }
+        } else if let Some(text) = existing.map(|e| db.agenda_text(e.id)).transpose()?.flatten() {
+            // ordinea de zi apare adesea înaintea proiectelor: repotrivim rândurile cu cardurile de acum
+            agenda_rows = Some(parse_agenda(&text));
         }
     } else {
         warnings.push(format!("{}: fără link către ordinea de zi", mref.url));
