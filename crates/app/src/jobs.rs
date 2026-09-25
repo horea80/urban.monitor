@@ -16,6 +16,9 @@ use crate::state::AppState;
 /// Pauza înainte de prima sincronizare, ca serverul să răspundă la /healthz imediat după pornire.
 const INITIAL_DELAY: Duration = Duration::from_secs(15);
 
+/// Marcaj în `URBAN_DATA_DIR`: dacă există la pornire, prima sincronizare e completă (`just resync full`).
+const FULL_SYNC_MARKER: &str = "full-sync";
+
 pub fn spawn(state: &'static AppState) {
     let interval = state.cfg.sync_interval;
     if interval.is_zero() {
@@ -36,20 +39,38 @@ pub fn spawn(state: &'static AppState) {
             "sincronizare periodică pornită"
         );
         tokio::time::sleep(INITIAL_DELAY).await;
+        let mut full = take_full_sync_marker(state);
         loop {
-            run_once(state, &client, &pdf, state.mailer.as_ref()).await;
+            run_once(state, &client, &pdf, state.mailer.as_ref(), SyncOptions { full }).await;
+            full = false;
             tokio::time::sleep(interval).await;
         }
     });
 }
 
-async fn run_once(state: &'static AppState, client: &Client, pdf: &Chain, mailer: Option<&Mailer>) {
+/// Șterge marcajul înainte de rulare, ca o sincronizare completă eșuată să nu se repete la fiecare pornire.
+fn take_full_sync_marker(state: &AppState) -> bool {
+    let path = state.cfg.data_dir.join(FULL_SYNC_MARKER);
+    match std::fs::remove_file(&path) {
+        Ok(()) => {
+            info!(path = %path.display(), "marcaj găsit: prima sincronizare este completă");
+            true
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+        Err(e) => {
+            warn!(path = %path.display(), error = %e, "nu am putut șterge marcajul; sincronizare obișnuită");
+            false
+        }
+    }
+}
+
+async fn run_once(state: &'static AppState, client: &Client, pdf: &Chain, mailer: Option<&Mailer>, opts: SyncOptions) {
     if state.sync_running.swap(true, Ordering::SeqCst) {
         warn!("o sincronizare este deja în curs; sar peste această rundă");
         return;
     }
     let started = Instant::now();
-    match sync::run(&state.cfg, client, &state.db, pdf, SyncOptions::default()).await {
+    match sync::run(&state.cfg, client, &state.db, pdf, opts).await {
         Ok(rep) => info!(
             meetings_seen = rep.meetings_seen,
             meetings_updated = rep.meetings_updated,

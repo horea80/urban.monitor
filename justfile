@@ -57,6 +57,12 @@ deploy-env:
 deploy-server:
     ./deploy/deploy.sh
 
+# restart the service, which syncs 15 s after startup; `just resync full` re-downloads everything (slow)
+resync MODE="":
+    @[ -z "{{MODE}}" ] || [ "{{MODE}}" = full ] || { echo "usage: just resync [full]" >&2; exit 1; }
+    ssh {{host}} '{{ if MODE == "full" { "sudo -u urban touch /opt/urban/data/full-sync && " } else { "" } }}sudo systemctl restart urban'
+    @echo "sync starts in ~15 s; follow it with: just logs"
+
 # follow the service journal
 logs:
     ssh {{host}} 'journalctl -u urban -f'

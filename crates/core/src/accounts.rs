@@ -138,6 +138,7 @@ fn row_to_user(r: &rusqlite::Row<'_>) -> rusqlite::Result<User> {
 const USER_SELECT: &str = "SELECT id, email, plan, credits_available, credits_used, cycle_start_at, cycle_end_at, \
      alerts_checked_until FROM users";
 
+#[allow(clippy::too_many_arguments)] // un parametru per coloană din credit_ledger
 fn ledger(
     tx: &Transaction<'_>,
     user_id: i64,
