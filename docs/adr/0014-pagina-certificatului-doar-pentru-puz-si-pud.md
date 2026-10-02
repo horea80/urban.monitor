@@ -40,6 +40,11 @@ Deci pagina nu localizează exact un PUZ, dar îl îngustează: suprafață, ce 
   „Destinația”, CF și cadastralul după etichetă, `None` când sunt „-”. Textul de regulament nu se stochează.
   Câmpurile intră în indexul de căutare al certificatului și pe card.
 - **Re-citirea listei nu atinge** aceste câmpuri: upsert-ul listei nu le include.
+- **Pasul de detalii rulează înaintea listei**, nu după: la primul deploy lista avea de parcurs din nou
+  istoricul (o oră), iar detaliile ar fi apărut abia la final. Tot atunci istoricul listei a devenit reluabil:
+  pagina curentă se scrie în `meta.certificates_backfill_page` după fiecare pagină și se șterge la final, iar o
+  rulare întreruptă continuă de acolo. Certificatele publicate între timp împing elementele spre pagini mai
+  mari, deci reluarea nu sare peste nimic (schimbare față de ADR-0013, în aceeași zi).
 
 ### Consecințe
 

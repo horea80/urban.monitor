@@ -23,6 +23,11 @@ use urban_shared::text::{classify, classify_scop, parse_work_address, street_of}
 /// Cheia din `meta`: anul până la care istoricul certificatelor a fost parcurs complet.
 const CERT_BACKFILL_KEY: &str = "certificates_backfill_year";
 
+/// Cheia din `meta`: următoarea pagină de citit dintr-o parcurgere a istoricului în curs; lipsește
+/// când nu e nicio parcurgere începută. Certificatele noi împing elementele spre pagini mai mari, deci
+/// reluarea de la pagina reținută nu sare peste nimic.
+const CERT_BACKFILL_PAGE_KEY: &str = "certificates_backfill_page";
+
 /// Plasă de siguranță pentru parcurgerea istoricului: 2024–2026 înseamnă ~310 pagini.
 const MAX_CERT_PAGES: u32 = 2000;
 
@@ -129,15 +134,16 @@ async fn run_inner(cfg: &Config, client: &Client, db: &Db, pdf: &dyn PdfText, op
         }
     }
 
-    // certificatele de urbanism (FR-10): o eroare aici nu anulează ce s-a scris pentru ședințe
-    if let Err(e) = sync_certificates(cfg, client, db, opts, &mut report).await {
-        error!(error = %e, "certificatele de urbanism au eșuat");
-        report.errors.push(format!("certificate de urbanism: {e}"));
-    }
-    // paginile certificatelor PUZ și PUD (FR-10.6), pas separat și reluabil
+    // paginile certificatelor PUZ și PUD (FR-10.6): pas scurt și plafonat, înaintea listei, ca detaliile
+    // să apară repede chiar dacă lista are de parcurs istoricul (o oră)
     if let Err(e) = sync_certificate_details(client, db, &mut report).await {
         error!(error = %e, "paginile certificatelor au eșuat");
         report.errors.push(format!("pagini de certificat: {e}"));
+    }
+    // lista certificatelor de urbanism (FR-10): o eroare aici nu anulează ce s-a scris pentru ședințe
+    if let Err(e) = sync_certificates(cfg, client, db, opts, &mut report).await {
+        error!(error = %e, "certificatele de urbanism au eșuat");
+        report.errors.push(format!("certificate de urbanism: {e}"));
     }
     Ok(report)
 }
@@ -193,12 +199,26 @@ async fn sync_certificates(
         .meta_get(CERT_BACKFILL_KEY)?
         .and_then(|v| v.parse::<i32>().ok())
         .is_some_and(|y| y <= start_year);
-    let walk_all = opts.full || !backfilled;
+    // o parcurgere întreruptă (restart, eroare) a lăsat pagina la care ajunsese: continuă de acolo
+    let resume_page = db
+        .meta_get(CERT_BACKFILL_PAGE_KEY)?
+        .and_then(|v| v.parse::<u32>().ok())
+        .filter(|p| *p > 1);
+    let walk_all = opts.full || !backfilled || resume_page.is_some();
+    let mut page = 1u32;
     if walk_all {
-        info!(start_year, "certificate de urbanism: parcurg tot istoricul");
+        match resume_page {
+            Some(p) => {
+                page = p;
+                info!(
+                    page,
+                    start_year, "certificate de urbanism: reiau istoricul de la pagina"
+                );
+            }
+            None => info!(start_year, "certificate de urbanism: parcurg tot istoricul"),
+        }
     }
 
-    let mut page = 1u32;
     loop {
         let url = certificates_page_url(&cfg.cert_listing_url, page);
         let html = client.get_html(&url).await?;
@@ -226,6 +246,9 @@ async fn sync_certificates(
         report.certificates_seen += writes.len();
         report.certificates_new += new;
         info!(page, seen = writes.len(), new, "pagină de certificate sincronizată");
+        if walk_all {
+            db.meta_set(CERT_BACKFILL_PAGE_KEY, &(page + 1).to_string())?;
+        }
 
         if reached_start || !parsed.has_next || (!walk_all && new == 0) {
             break;
@@ -240,6 +263,7 @@ async fn sync_certificates(
     }
     if walk_all {
         db.meta_set(CERT_BACKFILL_KEY, &start_year.to_string())?;
+        db.meta_delete(CERT_BACKFILL_PAGE_KEY)?;
     }
     Ok(())
 }

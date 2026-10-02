@@ -372,6 +372,9 @@ fn certificates_write_search_and_alert_window() {
         db.meta_get("certificates_backfill_year").unwrap().as_deref(),
         Some("2023")
     );
+    db.meta_delete("certificates_backfill_year").unwrap();
+    db.meta_delete("inexistent").unwrap();
+    assert_eq!(db.meta_get("certificates_backfill_year").unwrap(), None);
 }
 
 #[test]

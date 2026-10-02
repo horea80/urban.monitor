@@ -170,7 +170,8 @@ construire și documentațiile PUZ/PUD, deci sunt semnalul cel mai timpuriu.*
   utilizatorului, ca descărcarea istoricului să nu alerteze certificate vechi.
 - FR-10.5 Prima sincronizare (sau una completă, sau după coborârea anului de start) parcurge istoricul până la
   anul de start și notează asta în bază; apoi fiecare sincronizare citește paginile de la început până la prima
-  fără certificate noi. O parcurgere a istoricului întreruptă se reia de la capăt la rularea următoare.
+  fără certificate noi. Parcurgerea istoricului reține în bază pagina la care a ajuns; dacă e întreruptă (restart,
+  eroare), rularea următoare o reia de la acea pagină, nu de la capăt.
 - FR-10.6 Pentru certificatele `PUZ` și `PUD`, sistemul descarcă și pagina certificatului și reține doar partea
   specifică din ea: suprafața terenului (mp), codurile UTR din PUG, folosința actuală, cartea funciară și
   numerele cadastrale când sunt publicate (la PUZ de regulă nu sunt). Textul de regulament copiat din PUG nu

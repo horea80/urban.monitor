@@ -903,6 +903,11 @@ impl Db {
         Ok(())
     }
 
+    pub fn meta_delete(&self, key: &str) -> Result<()> {
+        self.conn()?.execute("DELETE FROM meta WHERE key = ?1", params![key])?;
+        Ok(())
+    }
+
     // ---- citire ----
 
     pub fn search(&self, q: &SearchQuery) -> Result<SearchResult> {
