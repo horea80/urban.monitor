@@ -8,14 +8,16 @@ use tracing::{error, info, warn};
 use crate::agenda::{AgendaRow, match_rows, parse_agenda};
 use crate::config::Config;
 use crate::db::{
-    AgendaRowWrite, CertificateWrite, Db, ItemWrite, MeetingSummary, MeetingWrite, RunCounts, WriteReport,
+    AgendaRowWrite, CertificateDetailWrite, CertificateWrite, Db, ItemWrite, MeetingSummary, MeetingWrite, RunCounts,
+    WriteReport,
 };
 use crate::error::{Error, Result};
 use crate::pdf::PdfText;
 use crate::scrape::{
-    Card, CertificateRef, Client, MeetingRef, certificates_page_url, first_pdf, parse_certificates, parse_documents,
-    parse_listing, parse_meeting,
+    Card, CertificateDetail, CertificateRef, Client, MeetingRef, certificates_page_url, first_pdf,
+    parse_certificate_detail, parse_certificates, parse_documents, parse_listing, parse_meeting,
 };
+use urban_shared::CertificateKind;
 use urban_shared::text::{classify, classify_scop, parse_work_address, street_of};
 
 /// Cheia din `meta`: anul până la care istoricul certificatelor a fost parcurs complet.
@@ -23,6 +25,13 @@ const CERT_BACKFILL_KEY: &str = "certificates_backfill_year";
 
 /// Plasă de siguranță pentru parcurgerea istoricului: 2024–2026 înseamnă ~310 pagini.
 const MAX_CERT_PAGES: u32 = 2000;
+
+/// Tipurile pentru care se descarcă și pagina certificatului (FR-10.6, ADR-0014): cele care anunță o
+/// documentație de urbanism, ~15% din certificate.
+const DETAIL_KINDS: [CertificateKind; 2] = [CertificateKind::Puz, CertificateKind::Pud];
+
+/// Pagini de certificat per rulare: ~2 s fiecare, deci cel mult ~10 minute; restul la rularea următoare.
+const MAX_DETAILS_PER_RUN: usize = 300;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SyncOptions {
@@ -38,6 +47,8 @@ pub struct SyncReport {
     /// Certificate de urbanism citite din paginile parcurse (FR-10).
     pub certificates_seen: usize,
     pub certificates_new: usize,
+    /// Pagini de certificat descărcate pentru PUZ și PUD (FR-10.6).
+    pub certificate_details: usize,
     pub errors: Vec<String>,
     pub warnings: Vec<String>,
 }
@@ -123,7 +134,48 @@ async fn run_inner(cfg: &Config, client: &Client, db: &Db, pdf: &dyn PdfText, op
         error!(error = %e, "certificatele de urbanism au eșuat");
         report.errors.push(format!("certificate de urbanism: {e}"));
     }
+    // paginile certificatelor PUZ și PUD (FR-10.6), pas separat și reluabil
+    if let Err(e) = sync_certificate_details(client, db, &mut report).await {
+        error!(error = %e, "paginile certificatelor au eșuat");
+        report.errors.push(format!("pagini de certificat: {e}"));
+    }
     Ok(report)
+}
+
+/// FR-10.6: pentru certificatele PUZ și PUD fără pagina descărcată, cele mai recente întâi, ia
+/// suprafața, UTR-urile, folosința actuală, CF și cadastralul. O pagină fără câmpurile așteptate se
+/// marchează totuși descărcată, ca să nu se reîncerce la nesfârșit; o descărcare eșuată se reia.
+async fn sync_certificate_details(client: &Client, db: &Db, report: &mut SyncReport) -> Result<()> {
+    let pending = db.certificates_needing_details(&DETAIL_KINDS, MAX_DETAILS_PER_RUN)?;
+    if pending.is_empty() {
+        return Ok(());
+    }
+    info!(n = pending.len(), "certificate: descarc paginile PUZ și PUD");
+    for (id, url) in pending {
+        match client.get_html(&url).await {
+            Ok(html) => {
+                let d = parse_certificate_detail(&html);
+                if d == CertificateDetail::default() {
+                    report
+                        .warnings
+                        .push(format!("{url}: pagina certificatului nu are câmpurile așteptate"));
+                }
+                db.write_certificate_details(
+                    id,
+                    &CertificateDetailWrite {
+                        surface_mp: d.surface_mp,
+                        utr: (!d.utr.is_empty()).then(|| d.utr.join(", ")),
+                        land_use: d.land_use,
+                        cf: d.cf,
+                        cadastral: d.cadastral,
+                    },
+                )?;
+                report.certificate_details += 1;
+            }
+            Err(e) => report.warnings.push(format!("{url}: pagina certificatului: {e}")),
+        }
+    }
+    Ok(())
 }
 
 /// FR-10.1: lista certificatelor, pagină cu pagină, cele mai noi întâi. La prima rulare, după `full`

@@ -4,7 +4,7 @@
 
 use chrono::{DateTime, NaiveDate, Utc};
 use dioxus::prelude::*;
-use urban_shared::text::normalize;
+use urban_shared::text::{fmt_thousands, normalize};
 use urban_shared::{AgendaRowView, Category, Certificate, CertificateKind, Item};
 
 use super::Route;
@@ -115,11 +115,14 @@ pub fn KindBadge(kind: CertificateKind) -> Element {
 }
 
 /// Un certificat de urbanism (FR-10.3): data emiterii, tipul, numărul cu link către primărie,
-/// adresa și scopul declarat (ascuns când e doar „informare”, adică tipul însuși).
+/// adresa, scopul declarat (ascuns când e doar „informare”, adică tipul însuși) și, la PUZ și PUD,
+/// suprafața, UTR-urile, folosința actuală, CF și cadastralul de pe pagina certificatului (FR-10.6).
 #[component]
 pub fn CertificateCard(cert: Certificate) -> Element {
     let date = fmt_date(cert.date);
     let show_scop = !cert.scop.is_empty() && normalize(&cert.scop) != "informare";
+    let has_land = cert.surface_mp.is_some() || cert.utr.is_some() || cert.land_use.is_some();
+    let has_cf = cert.cf.is_some() || cert.cadastral.is_some();
     rsx! {
         li { class: "item certificate",
             div { class: "meta",
@@ -131,6 +134,29 @@ pub fn CertificateCard(cert: Certificate) -> Element {
             }
             if let Some(a) = &cert.address {
                 p { class: "address", "{a}" }
+            }
+            if has_land {
+                p { class: "details",
+                    if let Some(mp) = cert.surface_mp {
+                        span { class: "detail", title: "Suprafața terenului", "{fmt_thousands(mp)} mp" }
+                    }
+                    if let Some(u) = &cert.utr {
+                        span { class: "detail", title: "Unitatea teritorială de referință din PUG", "UTR {u}" }
+                    }
+                    if let Some(l) = &cert.land_use {
+                        span { class: "detail", title: "Folosința actuală", "{l}" }
+                    }
+                }
+            }
+            if has_cf {
+                p { class: "details muted",
+                    if let Some(cf) = &cert.cf {
+                        span { class: "detail", "CF {cf}" }
+                    }
+                    if let Some(cad) = &cert.cadastral {
+                        span { class: "detail", "cadastral {cad}" }
+                    }
+                }
             }
             if show_scop {
                 p { class: "scop", "{cert.scop}" }

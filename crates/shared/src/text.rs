@@ -384,6 +384,22 @@ fn find_number_marker(s: &str) -> Option<(usize, usize)> {
     None
 }
 
+/// 26677 → „26 677”, cu spațiu ca separator de mii.
+pub fn fmt_thousands(n: i64) -> String {
+    let digits = n.abs().to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3 + 1);
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(' ');
+        }
+        out.push(c);
+    }
+    if n < 0 {
+        out.insert(0, '-');
+    }
+    out
+}
+
 /// Indexul în bytes al celui de-al `n`-lea caracter.
 fn byte_index(s: &str, n: usize) -> usize {
     s.char_indices().nth(n).map(|(i, _)| i).unwrap_or(s.len())
@@ -560,5 +576,14 @@ mod tests {
         let a = parse_work_address("judetul Cluj, municipiul Cluj-Napoca, Str Henri Barbusse, nr. 44-46");
         assert_eq!(a.street.as_deref(), Some("Henri Barbusse"));
         assert_eq!(a.street_no.as_deref(), Some("44-46"));
+    }
+
+    #[test]
+    fn thousands() {
+        assert_eq!(fmt_thousands(0), "0");
+        assert_eq!(fmt_thousands(777), "777");
+        assert_eq!(fmt_thousands(5393), "5 393");
+        assert_eq!(fmt_thousands(26677), "26 677");
+        assert_eq!(fmt_thousands(1234567), "1 234 567");
     }
 }

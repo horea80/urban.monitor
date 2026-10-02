@@ -20,7 +20,8 @@ Statusuri: `proposed` · `accepted` · `rejected` · `deprecated` · `superseded
 | [0010](0010-build-pe-statie-cross-compilare-zig.md) | Build pe stație, serverul cross-compilat pentru aarch64 cu zig; box-ul primește doar binarul | accepted | 2026-09-21 |
 | [0011](0011-alerte-email-resend.md) | Alerte pe email la ședințe noi prin Resend, listă fixă, starea în bază | accepted | 2026-09-21 |
 | [0012](0012-conturi-credite-cuvinte-cheie.md) | Conturi fără parolă, un credit = un cuvânt-cheie pe an, planul gratuit cu 2 credite | accepted | 2026-09-21 |
-| [0013](0013-certificate-de-urbanism-din-lista-html.md) | Certificatele de urbanism, a doua sursă, citite din lista HTML, fără pagini de detaliu | accepted | 2026-10-02 |
+| [0013](0013-certificate-de-urbanism-din-lista-html.md) | Certificatele de urbanism, a doua sursă, citite din lista HTML, fără pagini de detaliu | accepted, completat de 0014 | 2026-10-02 |
+| [0014](0014-pagina-certificatului-doar-pentru-puz-si-pud.md) | Pagina certificatului se descarcă doar pentru PUZ și PUD, și se păstrează doar prefixele specifice | accepted | 2026-10-02 |
 
 ## Cum adaugi o decizie
 

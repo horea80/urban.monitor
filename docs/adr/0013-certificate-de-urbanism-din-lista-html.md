@@ -6,6 +6,9 @@ decision-makers: horea
 
 # ADR-0013: Certificatele de urbanism, a doua sursă, citite din lista HTML, fără pagini de detaliu
 
+> Completat în aceeași zi de [ADR-0014](0014-pagina-certificatului-doar-pentru-puz-si-pud.md): pagina
+> certificatului se descarcă totuși, dar doar pentru PUZ și PUD și doar pentru câteva câmpuri.
+
 ## Context și problemă
 
 Ordinea de zi CTATU anunță ce se discută în comisie, dar certificatul de urbanism vine și mai devreme:

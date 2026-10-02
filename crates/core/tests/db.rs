@@ -1,5 +1,7 @@
 use chrono::NaiveDate;
-use urban_core::db::{AgendaRowWrite, CertificateWrite, Db, ItemWrite, MeetingWrite, RunCounts, fts_query};
+use urban_core::db::{
+    AgendaRowWrite, CertificateDetailWrite, CertificateWrite, Db, ItemWrite, MeetingWrite, RunCounts, fts_query,
+};
 use urban_core::shared::{Category, CertificateKind, CertificateQuery, Document, SearchQuery};
 
 fn open() -> (tempfile::TempDir, Db) {
@@ -370,4 +372,99 @@ fn certificates_write_search_and_alert_window() {
         db.meta_get("certificates_backfill_year").unwrap().as_deref(),
         Some("2023")
     );
+}
+
+#[test]
+fn certificate_details_are_fetched_once_and_searchable() {
+    let (_dir, db) = open();
+    let certs = vec![
+        cert(
+            "https://x/cu-1733",
+            1733,
+            2026,
+            (2026, 10, 1),
+            "INFORMARE",
+            CertificateKind::Informare,
+            None,
+            None,
+            None,
+        ),
+        cert(
+            "https://x/cu-1685",
+            1685,
+            2026,
+            (2026, 9, 14),
+            "ELABORARE PLAN URBANISTIC ZONAL",
+            CertificateKind::Puz,
+            Some("Str Doinaș, nr. FN"),
+            Some("Doinaș"),
+            None,
+        ),
+        cert(
+            "https://x/cu-1647",
+            1647,
+            2026,
+            (2026, 9, 3),
+            "ELABORARE PLAN URBANISTIC DE DETALIU",
+            CertificateKind::Pud,
+            Some("Str Decebal, nr. 96"),
+            Some("Decebal"),
+            Some("96"),
+        ),
+    ];
+    db.write_certificates(&certs).unwrap();
+
+    // doar PUZ și PUD, cele mai recente întâi, cu plafon
+    let kinds = [CertificateKind::Puz, CertificateKind::Pud];
+    let pending = db.certificates_needing_details(&kinds, 10).unwrap();
+    assert_eq!(pending.len(), 2);
+    assert_eq!(pending[0].1, "https://x/cu-1685");
+    assert_eq!(db.certificates_needing_details(&kinds, 1).unwrap().len(), 1);
+    assert!(db.certificates_needing_details(&[], 10).unwrap().is_empty());
+
+    db.write_certificate_details(
+        pending[0].0,
+        &CertificateDetailWrite {
+            surface_mp: Some(26677),
+            utr: Some("LC, ULC, UIs".into()),
+            land_use: Some("terenuri: arabil, livada, drum".into()),
+            cf: None,
+            cadastral: None,
+        },
+    )
+    .unwrap();
+    // o pagină fără câmpuri se marchează totuși descărcată
+    db.write_certificate_details(pending[1].0, &CertificateDetailWrite::default())
+        .unwrap();
+    assert!(db.certificates_needing_details(&kinds, 10).unwrap().is_empty());
+
+    // câmpurile se citesc și sunt indexate: căutăm după UTR și după folosință
+    let r = db
+        .search_certificates(&CertificateQuery {
+            q: "uis".into(),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(r.total, 1);
+    assert_eq!(r.items[0].number, 1685);
+    assert_eq!(r.items[0].surface_mp, Some(26677));
+    assert_eq!(r.items[0].utr.as_deref(), Some("LC, ULC, UIs"));
+    let r = db
+        .search_certificates(&CertificateQuery {
+            q: "livada".into(),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(r.total, 1);
+
+    // re-citirea listei nu șterge detaliile
+    db.write_certificates(&certs).unwrap();
+    let r = db
+        .search_certificates(&CertificateQuery {
+            q: "1685".into(),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(r.items[0].land_use.as_deref(), Some("terenuri: arabil, livada, drum"));
+    assert!(db.certificates_needing_details(&kinds, 10).unwrap().is_empty());
 }

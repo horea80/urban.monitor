@@ -161,8 +161,13 @@ Registrul de decizii este [docs/adr/](../adr/README.md), în format MADR.
   `div.field-scop` (text liber, cu variante: „INFORMARE”, „informare”, „INFOMARE”, descrieri lungi),
   `div.field-adresa_lucrare` („judetul Cluj, municipiul Cluj-Napoca, Strada X, nr. 28”; cam o treime se opresc
   la municipiu, „nr. FN” înseamnă fără număr). API-ul REST (`/wp-json/wp/v2/certificate-de-urbanism`) numără
-  58 071 certificate din 2013 (2 802 în 2024, 2 791 în 2025), dar nu expune scopul și adresa. Pagina de
-  detaliu adaugă CF, nr. cadastral, cererea, regimul juridic/economic/tehnic; nu se descarcă în v1.
+  58 071 certificate din 2013 (2 802 în 2024, 2 791 în 2025), dar nu expune scopul și adresa.
+- **Pagina certificatului** (observat 2026-10-02 pe 10 pagini): `div.field-nrfisacarte` („Carte funciară:
+  314038” sau „-”), `div.field-nrcadastral` („Nr Cadastral: 314038, 314038-C1” sau „-, identificat prin plan de
+  încadrare în zonă” la toate cele 6 PUZ-uri), `div.field-regimtehnic` (8–30 mii de caractere: prefixul
+  „S = 5393 mp EM” cu suprafața și UTR-ul, apoi regulamentul PUG de la „SECŢIUNEA 3…”; suprafața lipsește la
+  jumătate din PUZ-uri), `div.field-regimeconomic` („Folosință actuală: …” apoi „Destinația: UTR=ULC, …” și iar
+  regulament). Se descarcă doar pentru PUZ și PUD și se păstrează doar prefixele (ADR-0014).
 
 Fixture-uri: `crates/core/tests/fixtures/`.
 
@@ -179,8 +184,9 @@ agenda_rows(id, meeting_id → meetings, nr, reg_number, reg_date, beneficiary,
 items_fts  -- FTS5, content=items: title, address, street, beneficiary, agenda_description (normalizate)
 sync_runs(id, started_at, finished_at, ok, meetings_seen, items_new, error, certificates_new)
 -- certificate de urbanism (FR-10, ADR-0013)
-certificates(id, url UNIQUE, number, year, date, scop, kind, address, street, street_no, first_seen_at, last_seen_at)
-certificates_fts  -- FTS5: număr/an, scop, adresă, stradă, număr stradal (normalizate)
+certificates(id, url UNIQUE, number, year, date, scop, kind, address, street, street_no, first_seen_at, last_seen_at,
+             surface_mp, utr, land_use, cf, cadastral, detail_fetched_at)  -- ultimele șase: FR-10.6, doar PUZ/PUD
+certificates_fts  -- FTS5: număr/an, scop, adresă, stradă, număr stradal, utr, folosință, CF, cadastral (normalizate)
 meta(key PK, value)  -- stare internă: `certificates_backfill_year`, anul până la care s-a parcurs istoricul
 -- conturi (FR-9, ADR-0012); jetoanele doar ca hash SHA-256
 users(id, email UNIQUE, plan, credits_available, credits_used, cycle_start_at, cycle_end_at,

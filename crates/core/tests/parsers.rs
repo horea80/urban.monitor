@@ -2,7 +2,9 @@ mod common;
 
 use chrono::{Datelike, NaiveDate};
 use common::*;
-use urban_core::scrape::{first_pdf, parse_certificates, parse_documents, parse_listing, parse_meeting};
+use urban_core::scrape::{
+    first_pdf, parse_certificate_detail, parse_certificates, parse_documents, parse_listing, parse_meeting,
+};
 use urban_core::shared::CertificateKind;
 use urban_core::shared::text::{classify_scop, parse_work_address};
 
@@ -192,4 +194,28 @@ fn certificates_page_lists_24_newest_first() {
     assert_eq!(kinds.iter().filter(|k| **k == CertificateKind::Construire).count(), 4);
     assert_eq!(kinds.iter().filter(|k| **k == CertificateKind::Operatiuni).count(), 4);
     assert_eq!(kinds.iter().filter(|k| **k == CertificateKind::Altele).count(), 1);
+}
+
+#[test]
+fn certificate_detail_pages_puz_and_pud() {
+    // PUZ: fără CF și cadastral („identificat prin plan de încadrare în zonă”), dar cu suprafață, UTR-uri și folosință
+    let d = parse_certificate_detail(&fixture("certificate-1685-2026-puz.html"));
+    assert_eq!(d.surface_mp, Some(26677));
+    // „Destinația: UTR=ULC, …; UTR=Lc, …, UTR=VE”; „Lc” e același cod cu „LC” din regimul tehnic, iar
+    // subzonele din textul de regulament (UIs, UVa, UEt) nu sunt ale parcelei și nu trebuie să apară
+    assert_eq!(d.utr, vec!["LC", "ULC", "VE"]);
+    assert_eq!(d.land_use.as_deref(), Some("terenuri: arabil, livada, drum"));
+    assert_eq!(d.cf, None);
+    assert_eq!(d.cadastral, None);
+
+    // PUD: parcela e identificată exact
+    let d = parse_certificate_detail(&fixture("certificate-1647-2026-pud.html"));
+    assert_eq!(d.surface_mp, Some(608));
+    assert_eq!(d.utr, vec!["RRM1"]);
+    assert_eq!(
+        d.land_use.as_deref(),
+        Some("teren (curți construcții), construcția C1 - Casă, construcția C2 - Cabinet medical P+E+M")
+    );
+    assert_eq!(d.cf.as_deref(), Some("299486"));
+    assert_eq!(d.cadastral.as_deref(), Some("299486, 299486-C1, 299486-C2"));
 }

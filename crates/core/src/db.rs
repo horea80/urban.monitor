@@ -189,12 +189,24 @@ CREATE TABLE meta (
 );
 "#;
 
+// FR-10.6 (ADR-0014): câmpurile de pe pagina certificatului, descărcată doar pentru PUZ și PUD;
+// `detail_fetched_at` NULL = încă nedescărcată
+const SCHEMA_V5: &str = r#"
+ALTER TABLE certificates ADD COLUMN surface_mp INTEGER;
+ALTER TABLE certificates ADD COLUMN utr TEXT;
+ALTER TABLE certificates ADD COLUMN land_use TEXT;
+ALTER TABLE certificates ADD COLUMN cf TEXT;
+ALTER TABLE certificates ADD COLUMN cadastral TEXT;
+ALTER TABLE certificates ADD COLUMN detail_fetched_at TEXT;
+"#;
+
 fn migrations() -> Migrations<'static> {
     Migrations::new(vec![
         M::up(SCHEMA_V1),
         M::up(SCHEMA_V2),
         M::up(SCHEMA_V3),
         M::up(SCHEMA_V4),
+        M::up(SCHEMA_V5),
     ])
 }
 
@@ -400,7 +412,8 @@ fn row_to_sync_run(r: &Row<'_>) -> rusqlite::Result<SyncRun> {
     })
 }
 
-const CERT_SELECT: &str = "SELECT c.id, c.url, c.number, c.year, c.date, c.scop, c.kind, c.address, c.street, c.street_no \
+const CERT_SELECT: &str = "SELECT c.id, c.url, c.number, c.year, c.date, c.scop, c.kind, c.address, c.street, c.street_no, \
+     c.surface_mp, c.utr, c.land_use, c.cf, c.cadastral \
      FROM certificates c";
 
 fn row_to_certificate(r: &Row<'_>) -> rusqlite::Result<Certificate> {
@@ -415,7 +428,23 @@ fn row_to_certificate(r: &Row<'_>) -> rusqlite::Result<Certificate> {
         address: r.get(7)?,
         street: r.get(8)?,
         street_no: r.get(9)?,
+        surface_mp: r.get(10)?,
+        utr: r.get(11)?,
+        land_use: r.get(12)?,
+        cf: r.get(13)?,
+        cadastral: r.get(14)?,
     })
+}
+
+/// Ce scriem de pe pagina unui certificat (FR-10.6); `None` = câmpul lipsește pe pagină.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CertificateDetailWrite {
+    pub surface_mp: Option<i64>,
+    /// Codurile UTR, deja unite prin „, ”.
+    pub utr: Option<String>,
+    pub land_use: Option<String>,
+    pub cf: Option<String>,
+    pub cadastral: Option<String>,
 }
 
 /// Clauzele WHERE comune căutării în proiecte și în rândurile de agendă.
@@ -773,22 +802,43 @@ impl Db {
             if !existed {
                 new += 1;
             }
-            let nr = format!("{}/{}", c.number, c.year);
-            let text = fts_text([
-                Some(nr.as_str()),
-                Some(c.scop.as_str()),
-                c.address.as_deref(),
-                c.street.as_deref(),
-                c.street_no.as_deref(),
-            ]);
-            tx.execute("DELETE FROM certificates_fts WHERE cert_id = ?1", params![id])?;
-            tx.execute(
-                "INSERT INTO certificates_fts (cert_id, text) VALUES (?1, ?2)",
-                params![id, text],
-            )?;
+            reindex_certificate(&tx, id)?;
         }
         tx.commit()?;
         Ok(new)
+    }
+
+    /// Certificatele de tipurile date care nu au încă pagina descărcată, cele mai recente întâi.
+    pub fn certificates_needing_details(&self, kinds: &[CertificateKind], limit: usize) -> Result<Vec<(i64, String)>> {
+        if kinds.is_empty() || limit == 0 {
+            return Ok(Vec::new());
+        }
+        let conn = self.conn()?;
+        let mut f = Filters::new();
+        f.clauses.push("detail_fetched_at IS NULL".to_owned());
+        f.kinds("kind", kinds);
+        let sql = format!(
+            "SELECT id, url FROM certificates WHERE {} ORDER BY date DESC, number DESC LIMIT {limit}",
+            f.sql()
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        Ok(stmt
+            .query_map(params_from_iter(f.args.iter()), |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Scrie câmpurile de pe pagina certificatului și marchează pagina ca descărcată; reindexează.
+    pub fn write_certificate_details(&self, id: i64, d: &CertificateDetailWrite) -> Result<()> {
+        let mut conn = self.conn()?;
+        let tx = conn.transaction()?;
+        tx.execute(
+            "UPDATE certificates SET surface_mp = ?2, utr = ?3, land_use = ?4, cf = ?5, cadastral = ?6, \
+                                     detail_fetched_at = ?7 WHERE id = ?1",
+            params![id, d.surface_mp, d.utr, d.land_use, d.cf, d.cadastral, now_iso()],
+        )?;
+        reindex_certificate(&tx, id)?;
+        tx.commit()?;
+        Ok(())
     }
 
     pub fn search_certificates(&self, q: &CertificateQuery) -> Result<CertificateResult> {
@@ -1043,6 +1093,37 @@ fn reindex_item(tx: &Transaction<'_>, id: i64) -> Result<()> {
     tx.execute("DELETE FROM items_fts WHERE item_id = ?1", params![id])?;
     tx.execute(
         "INSERT INTO items_fts (item_id, text) VALUES (?1, ?2)",
+        params![id, text],
+    )?;
+    Ok(())
+}
+
+/// Textul FTS al unui certificat: număr/an, scop, adresă, stradă, număr stradal și, când există,
+/// câmpurile de pe pagina certificatului (FR-10.6).
+fn reindex_certificate(tx: &Transaction<'_>, id: i64) -> Result<()> {
+    let text: String = tx.query_row(
+        "SELECT number, year, scop, address, street, street_no, utr, land_use, cf, cadastral          FROM certificates WHERE id = ?1",
+        params![id],
+        |r| {
+            let nr = format!("{}/{}", r.get::<_, i64>(0)?, r.get::<_, i64>(1)?);
+            let parts: [Option<String>; 8] = [
+                r.get(2)?,
+                r.get(3)?,
+                r.get(4)?,
+                r.get(5)?,
+                r.get(6)?,
+                r.get(7)?,
+                r.get(8)?,
+                r.get(9)?,
+            ];
+            Ok(fts_text(
+                std::iter::once(Some(nr.as_str())).chain(parts.iter().map(|p| p.as_deref())),
+            ))
+        },
+    )?;
+    tx.execute("DELETE FROM certificates_fts WHERE cert_id = ?1", params![id])?;
+    tx.execute(
+        "INSERT INTO certificates_fts (cert_id, text) VALUES (?1, ?2)",
         params![id, text],
     )?;
     Ok(())

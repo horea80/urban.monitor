@@ -9,6 +9,7 @@ use std::time::Duration;
 use chrono::Local;
 use serde::Serialize;
 use tracing::info;
+use urban_shared::text::fmt_thousands;
 use urban_shared::time::fmt_date_ro;
 use urban_shared::{Certificate, Item, Meeting};
 
@@ -203,7 +204,27 @@ fn item_line(i: &Item) -> String {
 
 fn certificate_line(c: &Certificate) -> String {
     let unde = c.address.as_deref().map(|s| format!(" — {s}")).unwrap_or_default();
-    format!("{} ({}){unde}, emis {}", c.title(), c.kind.label(), fmt_date_ro(c.date))
+    let mut extra: Vec<String> = Vec::new();
+    if let Some(mp) = c.surface_mp {
+        extra.push(format!("{} mp", fmt_thousands(mp)));
+    }
+    if let Some(u) = &c.utr {
+        extra.push(format!("UTR {u}"));
+    }
+    if let Some(l) = &c.land_use {
+        extra.push(l.clone());
+    }
+    let extra = if extra.is_empty() {
+        String::new()
+    } else {
+        format!("; {}", extra.join(", "))
+    };
+    format!(
+        "{} ({}){unde}{extra}, emis {}",
+        c.title(),
+        c.kind.label(),
+        fmt_date_ro(c.date)
+    )
 }
 
 /// Rezumatul pe cuvinte-cheie: proiectele și certificatele de urbanism noi, grupate pe cuvânt.
@@ -383,6 +404,7 @@ mod tests {
             address: Some("Str Fabricii, nr. 7".into()),
             street: Some("Fabricii".into()),
             street_no: Some("7".into()),
+            ..Default::default()
         };
         let m = Matches {
             keywords: vec![KeywordMatches {

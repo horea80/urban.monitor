@@ -164,6 +164,21 @@ pub struct Certificate {
     pub street: Option<String>,
     /// Numărul stradal, ca text („28”, „107-109”, „31g”); `None` când lipsește sau e „FN”.
     pub street_no: Option<String>,
+    /// Suprafața terenului, în mp, de pe pagina certificatului (FR-10.6); doar la PUZ și PUD.
+    #[serde(default)]
+    pub surface_mp: Option<i64>,
+    /// Codurile UTR din PUG, separate prin virgulă: „LC, ULC, UIs”.
+    #[serde(default)]
+    pub utr: Option<String>,
+    /// Folosința actuală a terenului: „terenuri: arabil, livadă, drum”.
+    #[serde(default)]
+    pub land_use: Option<String>,
+    /// Numărul cărții funciare, când primăria îl publică (la PUZ de obicei nu).
+    #[serde(default)]
+    pub cf: Option<String>,
+    /// Numerele cadastrale, ca text: „314038, 314038-C1”.
+    #[serde(default)]
+    pub cadastral: Option<String>,
 }
 
 impl Certificate {

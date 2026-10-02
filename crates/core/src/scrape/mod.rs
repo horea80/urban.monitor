@@ -6,7 +6,10 @@ pub mod listing;
 pub mod meeting;
 pub mod project;
 
-pub use certificates::{CertificateRef, CertificatesPage, page_url as certificates_page_url, parse_certificates};
+pub use certificates::{
+    CertificateDetail, CertificateRef, CertificatesPage, page_url as certificates_page_url, parse_certificate_detail,
+    parse_certificates,
+};
 pub use client::Client;
 pub use listing::{MeetingRef, parse_listing};
 pub use meeting::{Card, CardKind, MeetingPage, parse_meeting};

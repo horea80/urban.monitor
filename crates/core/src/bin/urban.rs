@@ -104,13 +104,14 @@ async fn main() -> anyhow::Result<()> {
             let pdf = Chain::default_chain();
             let report = sync::run(&cfg, &client, &db, &pdf, SyncOptions { full }).await?;
             println!(
-                "ședințe în listă: {}, actualizate: {}, proiecte noi: {}, certificate citite: {}, noi: {}, \
+                "ședințe în listă: {}, actualizate: {}, proiecte noi: {}, certificate citite: {}, noi: {}, pagini de certificat: {}, \
                  avertismente: {}, erori: {}",
                 report.meetings_seen,
                 report.meetings_updated,
                 report.items_new,
                 report.certificates_seen,
                 report.certificates_new,
+                report.certificate_details,
                 report.warnings.len(),
                 report.errors.len()
             );
@@ -200,13 +201,34 @@ async fn main() -> anyhow::Result<()> {
             }
             println!("{} certificate găsite", result.total);
             for c in &result.items {
+                let mut land: Vec<String> = Vec::new();
+                if let Some(mp) = c.surface_mp {
+                    land.push(format!("{mp} mp"));
+                }
+                if let Some(u) = &c.utr {
+                    land.push(format!("UTR {u}"));
+                }
+                if let Some(l) = &c.land_use {
+                    land.push(l.clone());
+                }
+                if let Some(cf) = &c.cf {
+                    land.push(format!("CF {cf}"));
+                }
+                if let Some(cad) = &c.cadastral {
+                    land.push(format!("cadastral {cad}"));
+                }
                 println!(
-                    "{}  {:<34}  {}\n{:>12}  {}\n{:>12}  {}",
+                    "{}  {:<34}  {}\n{:>12}  {}{}\n{:>12}  {}",
                     c.date,
                     c.kind.label(),
                     c.title(),
                     "",
                     c.address.as_deref().unwrap_or("-"),
+                    if land.is_empty() {
+                        String::new()
+                    } else {
+                        format!("  ·  {}", land.join(" · "))
+                    },
                     "",
                     c.url
                 );
