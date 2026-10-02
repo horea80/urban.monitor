@@ -3,7 +3,7 @@
 use chrono::NaiveDate;
 use unicode_normalization::UnicodeNormalization;
 
-use crate::model::Category;
+use crate::model::{Category, CertificateKind};
 
 /// Elimină diacriticele: NFKD + eliminarea semnelor combinate.
 /// Acoperă ă â î ș ț cu virgulă și ş ţ cu sedilă.
@@ -132,9 +132,12 @@ pub fn parse_time(text: &str) -> Option<String> {
     None
 }
 
-const STREET_PREFIXES: [&str; 22] = [
+const STREET_PREFIXES: [&str; 25] = [
     "strada",
+    "strazii",
+    "străzii",
     "str",
+    "p-ța",
     "calea",
     "bulevardul",
     "b-dul",
@@ -170,7 +173,8 @@ pub fn street_of(address: &str) -> Option<String> {
                 let boundary =
                     rest.is_empty() || rest.starts_with('.') || rest.starts_with(' ') || rest.starts_with(',');
                 if boundary {
-                    let skip = p.len() + rest.chars().take_while(|c| *c == '.' || *c == ' ').count();
+                    // în caractere, nu în bytes: „străzii” și „piața” au diacritice
+                    let skip = p.chars().count() + rest.chars().take_while(|c| *c == '.' || *c == ' ').count();
                     s = &s[byte_index(s, skip)..];
                     cut = true;
                     break;
@@ -201,6 +205,183 @@ pub fn street_of(address: &str) -> Option<String> {
     } else {
         Some(street.to_owned())
     }
+}
+
+/// Tipul unui certificat de urbanism după scopul declarat (FR-10.2). Scopul e text liber, cu
+/// variante și greșeli („INFOMARE”), deci regulile merg pe textul normalizat, în ordinea: PUZ/PUD
+/// cerute explicit (nu „conform PUZ aprobat”), lucrări de autorizat, operațiuni notariale sau
+/// cadastrale, informare.
+pub fn classify_scop(scop: &str) -> CertificateKind {
+    const WORKS: [&str; 19] = [
+        "autoriz",
+        "construir",
+        "construct",
+        "desfiintar",
+        "demolar",
+        "documentatie tehnic",
+        "documentatiei tehnic",
+        "documentatii tehnic",
+        "dtac",
+        "dtad",
+        "intrare in legalitate",
+        "reabilitar",
+        "refatadiz",
+        "extinder",
+        "mansardar",
+        "studiu de fezabilitate",
+        "proiect tehnic",
+        "amenajar",
+        "modificari interioare",
+    ];
+    const OPS: [&str; 6] = [
+        "notarial",
+        "cadastral",
+        "dezmembrar",
+        "alipir",
+        "circulatia imobil",
+        "intabular",
+    ];
+    let n = normalize(scop);
+    let toks: Vec<&str> = n.split(' ').filter(|t| !t.is_empty()).collect();
+    if n.contains("plan urbanistic zonal") || leads_with_abbrev(&toks, "puz") {
+        return CertificateKind::Puz;
+    }
+    if n.contains("plan urbanistic de detaliu") || leads_with_abbrev(&toks, "pud") {
+        return CertificateKind::Pud;
+    }
+    if WORKS.iter().any(|w| n.contains(w)) {
+        return CertificateKind::Construire;
+    }
+    if OPS.iter().any(|w| n.contains(w)) {
+        return CertificateKind::Operatiuni;
+    }
+    if n.contains("informare") || n.contains("infomare") {
+        return CertificateKind::Informare;
+    }
+    CertificateKind::Altele
+}
+
+/// Abrevierea („puz”, sau literele ei din „P.U.Z”) printre primii tokeni, fără un „conform” sau
+/// „aprobat” înaintea ei: „ELABORARE PUZ…” da, „INFORMARE CONFORM PUZ APROBAT…” nu.
+fn leads_with_abbrev(toks: &[&str], abbrev: &str) -> bool {
+    const STOP: [&str; 5] = ["conform", "cf", "potrivit", "informare", "aprobat"];
+    let letters: Vec<String> = abbrev.chars().map(|c| c.to_string()).collect();
+    for (i, w) in toks.iter().take(6).enumerate() {
+        if STOP.contains(w) {
+            return false;
+        }
+        if *w == abbrev {
+            return true;
+        }
+        let end = i + letters.len();
+        if end <= toks.len() && toks[i..end].iter().zip(&letters).all(|(a, b)| *a == b) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Adresa unei lucrări dintr-un certificat de urbanism, descompusă (FR-10.1).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct WorkAddress {
+    /// Fără prefixul administrativ: „CĂPITAN GRIGORE IGNAT, nr. 28”; `None` când nu rămâne nimic.
+    pub address: Option<String>,
+    pub street: Option<String>,
+    /// „28”, „107-109”, „31g”; `None` când lipsește sau e „FN” / „f.nr.”.
+    pub street_no: Option<String>,
+}
+
+/// „judetul Cluj, municipiul Cluj-Napoca, Str Traian Vuia, nr. 246” → adresa „Str Traian Vuia, nr. 246”,
+/// strada „Traian Vuia”, numărul „246”. Segmentele cu județul și municipiul se elimină; fără ele,
+/// adresa lipsește cu totul (cam o treime din certificate).
+pub fn parse_work_address(raw: &str) -> WorkAddress {
+    let segs: Vec<&str> = raw
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && !is_admin_segment(s))
+        .collect();
+    if segs.is_empty() {
+        return WorkAddress::default();
+    }
+    let address = segs.join(", ");
+    let (street_part, street_no) = match find_number_marker(&address) {
+        Some((start, after)) => {
+            let number: String = address[after..]
+                .trim_start_matches(['.', ':', ' '])
+                .split(',')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .trim_end_matches('.')
+                .to_owned();
+            (address[..start].trim_end_matches([' ', ',', '.']).to_owned(), number)
+        }
+        None => {
+            // „str. Plevnei 134”: ultimul cuvânt al primului segment, dacă începe cu o cifră
+            let first = segs[0];
+            let last = first.rsplit(' ').next().unwrap_or("");
+            let number = if last.starts_with(|c: char| c.is_ascii_digit()) && last != first {
+                last.to_owned()
+            } else {
+                String::new()
+            };
+            (first.to_owned(), number)
+        }
+    };
+    let n = normalize(&street_no);
+    let no_number = n.is_empty()
+        || matches!(
+            n.as_str(),
+            "fn" | "f n" | "fnr" | "f nr" | "fm" | "fara numar" | "fara nr"
+        );
+    WorkAddress {
+        address: Some(address),
+        street: street_of(&street_part),
+        street_no: (!no_number).then_some(street_no),
+    }
+}
+
+/// „judetul Cluj”, „municipiul Cluj-Napoca”, „Cluj-Napoca”.
+fn is_admin_segment(s: &str) -> bool {
+    let n = normalize(s);
+    [
+        "judetul",
+        "judet",
+        "jud",
+        "municipiul",
+        "mun",
+        "comuna",
+        "orasul",
+        "localitatea",
+    ]
+    .iter()
+    .any(|p| n == *p || n.starts_with(&format!("{p} ")))
+        || n == "cluj napoca"
+        || n == "cluj"
+}
+
+/// Poziția markerului „nr” (început și indexul de după el), ca token: la început, după spațiu sau
+/// virgulă, urmat de punct, spațiu, cifră sau sfârșit. „Henri” nu se potrivește.
+fn find_number_marker(s: &str) -> Option<(usize, usize)> {
+    let chars: Vec<(usize, char)> = s.char_indices().collect();
+    for (k, &(i, c)) in chars.iter().enumerate() {
+        if !matches!(c, 'n' | 'N') {
+            continue;
+        }
+        let Some(&(_, c2)) = chars.get(k + 1) else { break };
+        if !matches!(c2, 'r' | 'R') {
+            continue;
+        }
+        let before_ok = k == 0 || matches!(chars[k - 1].1, ' ' | ',' | '.');
+        let after = chars.get(k + 2).map(|&(j, _)| j).unwrap_or(s.len());
+        let after_ok = chars
+            .get(k + 2)
+            .is_none_or(|&(_, c3)| matches!(c3, '.' | ' ' | ':' | ',') || c3.is_ascii_digit());
+        if before_ok && after_ok {
+            return Some((i, after));
+        }
+    }
+    None
 }
 
 /// Indexul în bytes al celui de-al `n`-lea caracter.
@@ -284,5 +465,100 @@ mod tests {
             Some("Vidrei")
         );
         assert_eq!(street_of(""), None);
+    }
+
+    #[test]
+    fn classify_scopes_from_real_certificates() {
+        use CertificateKind::*;
+        assert_eq!(classify_scop("INFORMARE"), Informare);
+        assert_eq!(classify_scop("informare"), Informare);
+        assert_eq!(classify_scop("INFOMARE"), Informare);
+        assert_eq!(classify_scop("ELABORARE PLAN URBANISTIC ZONAL"), Puz);
+        assert_eq!(classify_scop(" ELABORARE P.U.Z. - PARCELARE"), Puz);
+        assert_eq!(
+            classify_scop("ELABORARE PLAN URBANISTIC DE DETALIU ȘI DOCUMENTAȚIE TEHNICĂ PENTRU AUTORIZARE"),
+            Pud
+        );
+        assert_eq!(
+            classify_scop(
+                "ELABORARE DOCUMENTATIE TEHNICA PENTRU AUTORIZAREA EXECUTARII LUCRARILOR DE CONSTRUIRE IMOBIL \
+                 DE LOCUINTE COLECTIVE MICI, IMPREJMUIRE, AMENAJARI EXTERIOARE, OPERATIUNI NOTARIALE SI INFORMARE"
+            ),
+            Construire
+        );
+        assert_eq!(
+            classify_scop(
+                "ELABORARE DOCUMENTAȚIE TEHNICĂ PENTRU INTRARE IN LEGALITATE CONSTRUIRE LOCUINȚĂ UNIFAMILIALĂ \
+                 CONFORM P.U.Z. VALEA FÂNAȚELOR APROBAT CU H.C.L. NR. 519 DIN 15.12.2009"
+            ),
+            Construire
+        );
+        assert_eq!(
+            classify_scop("ELABORARE DOCUMENTAłIE TEHNICĂ PENTRU AUTORIZAREA"),
+            Construire
+        );
+        assert_eq!(
+            classify_scop("ELABORARE STUDIU DE FEZABILITATE SI DOCUMENTATIE"),
+            Construire
+        );
+        assert_eq!(classify_scop("AMENAJARE SPAȚIU VERDE"), Construire);
+        assert_eq!(classify_scop("OPERAȚIUNI CADASTRALE"), Operatiuni);
+        assert_eq!(classify_scop("OPERATIUNI NOTARIALE ALIPIRE PARCELE"), Operatiuni);
+        assert_eq!(
+            classify_scop("OPERAȚIUNI NOTARIALE - DEZMEMBRARE CONFORM PUD APROBAT"),
+            Operatiuni
+        );
+        assert_eq!(classify_scop("INFORMARE CONFORM PUZ APROBAT CU HCL 5/2020"), Informare);
+        assert_eq!(
+            classify_scop("DEZVOLTAREA UNEI CAPACITĂȚI NOI DE PRODUCERE A ENERGIEI ELECTRICE"),
+            Altele
+        );
+        assert_eq!(classify_scop(""), Altele);
+    }
+
+    #[test]
+    fn work_addresses() {
+        let a = parse_work_address("judetul Cluj, municipiul Cluj-Napoca, CĂPITAN GRIGORE IGNAT, nr. 28");
+        assert_eq!(a.address.as_deref(), Some("CĂPITAN GRIGORE IGNAT, nr. 28"));
+        assert_eq!(a.street.as_deref(), Some("CĂPITAN GRIGORE IGNAT"));
+        assert_eq!(a.street_no.as_deref(), Some("28"));
+
+        assert_eq!(
+            parse_work_address("judetul Cluj, municipiul Cluj-Napoca"),
+            WorkAddress::default()
+        );
+        assert_eq!(parse_work_address("  "), WorkAddress::default());
+
+        let a = parse_work_address("judetul Cluj, municipiul Cluj-Napoca, Zona străzii Valea Chintăului");
+        assert_eq!(a.street.as_deref(), Some("Valea Chintăului"));
+        assert_eq!(a.street_no, None);
+
+        let a = parse_work_address("judetul Cluj, municipiul Cluj-Napoca, Strada Mihai Românu, nr. FN");
+        assert_eq!(a.street.as_deref(), Some("Mihai Românu"));
+        assert_eq!(a.street_no, None);
+
+        let a = parse_work_address("judetul Cluj, municipiul Cluj-Napoca, Zona str. Frunzisului, nr. f.nr.");
+        assert_eq!(a.street.as_deref(), Some("Frunzisului"));
+        assert_eq!(a.street_no, None);
+
+        let a = parse_work_address("judetul CLUJ, municipiul CLUJ-NAPOCA, Str P-ța Ștefan cel Mare, nr. 20");
+        assert_eq!(a.street.as_deref(), Some("Ștefan cel Mare"));
+        assert_eq!(a.street_no.as_deref(), Some("20"));
+
+        let a = parse_work_address("judetul Cluj, municipiul Cluj-Napoca, ZoNA COLONIA FAGET, nr. FM");
+        assert_eq!(a.street.as_deref(), Some("FAGET"));
+        assert_eq!(a.street_no, None);
+
+        let a = parse_work_address("str. Morii nr. 31g");
+        assert_eq!(a.street.as_deref(), Some("Morii"));
+        assert_eq!(a.street_no.as_deref(), Some("31g"));
+
+        let a = parse_work_address("str. Plevnei 134");
+        assert_eq!(a.street.as_deref(), Some("Plevnei"));
+        assert_eq!(a.street_no.as_deref(), Some("134"));
+
+        let a = parse_work_address("judetul Cluj, municipiul Cluj-Napoca, Str Henri Barbusse, nr. 44-46");
+        assert_eq!(a.street.as_deref(), Some("Henri Barbusse"));
+        assert_eq!(a.street_no.as_deref(), Some("44-46"));
     }
 }

@@ -18,6 +18,10 @@ pub struct Config {
     pub sync_interval: Duration,
     pub user_agent: String,
     pub listing_url: String,
+    /// Lista certificatelor de urbanism emise (FR-10).
+    pub cert_listing_url: String,
+    /// Primul an de certificate păstrat; mai vechi de atât nu se descarcă.
+    pub cert_start_year: i32,
     /// Adresa publică a site-ului, pentru linkurile din alerte.
     pub public_url: String,
     /// Alerte pe email la ședințe noi (FR-8); `None` când lipsește `RESEND_API_KEY`.
@@ -45,6 +49,8 @@ impl std::fmt::Debug for AlertConfig {
 
 impl Config {
     pub const LISTING_URL: &'static str = "https://primariaclujnapoca.ro/strategii-urbane/comisia-tehnica-de-amenajare-a-teritoriului-si-urbanism/sedinte-comisie/";
+    pub const CERT_LISTING_URL: &'static str =
+        "https://primariaclujnapoca.ro/urbanism/certificate-de-urbanism/documente-emise/";
 
     pub fn from_env() -> Self {
         let sync_hours: f64 = env_parse("URBAN_SYNC_HOURS", 6.0);
@@ -59,6 +65,8 @@ impl Config {
                 "urban-monitor/0.1 (monitorizare publica a sedintelor CTATU Cluj-Napoca; uz personal)",
             ),
             listing_url: env_or("URBAN_LISTING_URL", Self::LISTING_URL),
+            cert_listing_url: env_or("URBAN_CERT_LISTING_URL", Self::CERT_LISTING_URL),
+            cert_start_year: env_parse("URBAN_CERT_START_YEAR", 2024),
             public_url: env_or("URBAN_PUBLIC_URL", "https://urbanism.hopartean.com")
                 .trim_end_matches('/')
                 .to_owned(),

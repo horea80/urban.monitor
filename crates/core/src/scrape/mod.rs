@@ -1,10 +1,12 @@
 //! Descarcare politicoasa si parsare a paginilor de pe site-ul primariei.
 
+pub mod certificates;
 pub mod client;
 pub mod listing;
 pub mod meeting;
 pub mod project;
 
+pub use certificates::{CertificateRef, CertificatesPage, page_url as certificates_page_url, parse_certificates};
 pub use client::Client;
 pub use listing::{MeetingRef, parse_listing};
 pub use meeting::{Card, CardKind, MeetingPage, parse_meeting};

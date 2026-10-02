@@ -1,16 +1,28 @@
 //! Sincronizare incrementală (FR-1.8, FR-1.9): lista → ședințele selectate → o scriere per ședință.
 //! Toate descărcările unei ședințe se fac înainte de tranzacție; erorile per ședință nu opresc restul.
+//! După ședințe urmează certificatele de urbanism (FR-10), pagină cu pagină, o scriere per pagină.
 
 use chrono::{Datelike, Local};
 use tracing::{error, info, warn};
 
 use crate::agenda::{AgendaRow, match_rows, parse_agenda};
 use crate::config::Config;
-use crate::db::{AgendaRowWrite, Db, ItemWrite, MeetingSummary, MeetingWrite, RunCounts, WriteReport};
+use crate::db::{
+    AgendaRowWrite, CertificateWrite, Db, ItemWrite, MeetingSummary, MeetingWrite, RunCounts, WriteReport,
+};
 use crate::error::{Error, Result};
 use crate::pdf::PdfText;
-use crate::scrape::{Card, Client, MeetingRef, first_pdf, parse_documents, parse_listing, parse_meeting};
-use urban_shared::text::{classify, street_of};
+use crate::scrape::{
+    Card, CertificateRef, Client, MeetingRef, certificates_page_url, first_pdf, parse_certificates, parse_documents,
+    parse_listing, parse_meeting,
+};
+use urban_shared::text::{classify, classify_scop, parse_work_address, street_of};
+
+/// Cheia din `meta`: anul până la care istoricul certificatelor a fost parcurs complet.
+const CERT_BACKFILL_KEY: &str = "certificates_backfill_year";
+
+/// Plasă de siguranță pentru parcurgerea istoricului: 2024–2026 înseamnă ~310 pagini.
+const MAX_CERT_PAGES: u32 = 2000;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SyncOptions {
@@ -23,6 +35,9 @@ pub struct SyncReport {
     pub meetings_seen: usize,
     pub meetings_updated: usize,
     pub items_new: usize,
+    /// Certificate de urbanism citite din paginile parcurse (FR-10).
+    pub certificates_seen: usize,
+    pub certificates_new: usize,
     pub errors: Vec<String>,
     pub warnings: Vec<String>,
 }
@@ -33,6 +48,7 @@ impl SyncReport {
             meetings_seen: self.meetings_seen,
             meetings_updated: self.meetings_updated,
             items_new: self.items_new,
+            certificates_new: self.certificates_new,
         }
     }
 }
@@ -101,7 +117,94 @@ async fn run_inner(cfg: &Config, client: &Client, db: &Db, pdf: &dyn PdfText, op
             }
         }
     }
+
+    // certificatele de urbanism (FR-10): o eroare aici nu anulează ce s-a scris pentru ședințe
+    if let Err(e) = sync_certificates(cfg, client, db, opts, &mut report).await {
+        error!(error = %e, "certificatele de urbanism au eșuat");
+        report.errors.push(format!("certificate de urbanism: {e}"));
+    }
     Ok(report)
+}
+
+/// FR-10.1: lista certificatelor, pagină cu pagină, cele mai noi întâi. La prima rulare, după `full`
+/// sau după coborârea anului de start parcurge tot istoricul până la `cert_start_year` și notează
+/// asta în `meta`; altfel se oprește la prima pagină fără certificate noi, de obicei a doua.
+async fn sync_certificates(
+    cfg: &Config,
+    client: &Client,
+    db: &Db,
+    opts: SyncOptions,
+    report: &mut SyncReport,
+) -> Result<()> {
+    let start_year = cfg.cert_start_year;
+    let backfilled = db
+        .meta_get(CERT_BACKFILL_KEY)?
+        .and_then(|v| v.parse::<i32>().ok())
+        .is_some_and(|y| y <= start_year);
+    let walk_all = opts.full || !backfilled;
+    if walk_all {
+        info!(start_year, "certificate de urbanism: parcurg tot istoricul");
+    }
+
+    let mut page = 1u32;
+    loop {
+        let url = certificates_page_url(&cfg.cert_listing_url, page);
+        let html = client.get_html(&url).await?;
+        let parsed = parse_certificates(&html, &url);
+        if parsed.certificates.is_empty() {
+            if page == 1 {
+                return Err(Error::parse(
+                    &url,
+                    "niciun certificat găsit în listă; s-a schimbat structura paginii?",
+                ));
+            }
+            report
+                .warnings
+                .push(format!("{url}: pagină fără certificate; mă opresc aici"));
+            break;
+        }
+        let reached_start = parsed.certificates.iter().any(|c| c.date.year() < start_year);
+        let writes: Vec<CertificateWrite> = parsed
+            .certificates
+            .iter()
+            .filter(|c| c.date.year() >= start_year)
+            .map(certificate_write)
+            .collect();
+        let new = db.write_certificates(&writes)?;
+        report.certificates_seen += writes.len();
+        report.certificates_new += new;
+        info!(page, seen = writes.len(), new, "pagină de certificate sincronizată");
+
+        if reached_start || !parsed.has_next || (!walk_all && new == 0) {
+            break;
+        }
+        page += 1;
+        if page > MAX_CERT_PAGES {
+            report
+                .warnings
+                .push(format!("certificate: m-am oprit după {MAX_CERT_PAGES} pagini"));
+            break;
+        }
+    }
+    if walk_all {
+        db.meta_set(CERT_BACKFILL_KEY, &start_year.to_string())?;
+    }
+    Ok(())
+}
+
+fn certificate_write(c: &CertificateRef) -> CertificateWrite {
+    let addr = c.address.as_deref().map(parse_work_address).unwrap_or_default();
+    CertificateWrite {
+        url: c.url.clone(),
+        number: c.number,
+        year: c.year,
+        date: c.date,
+        scop: c.scop.clone(),
+        kind: classify_scop(&c.scop),
+        address: addr.address,
+        street: addr.street,
+        street_no: addr.street_no,
+    }
 }
 
 async fn process_meeting(

@@ -25,7 +25,8 @@ use crate::auth::{self, RateKey};
         title = "urban.monitor API",
         description = "Ședințele Comisiei Tehnice de Amenajare a Teritoriului și Urbanism (CTATU) \
                        Cluj-Napoca, din 2026 încoace: proiecte PUZ, PUD și avize de oportunitate, \
-                       căutabile după stradă. Read-only, public. Sursa: primariaclujnapoca.ro.",
+                       căutabile după stradă; certificatele de urbanism emise, din 2024 încoace. \
+                       Read-only, public. Sursa: primariaclujnapoca.ro.",
         license(name = "MIT")
     ),
     servers((url = "/api/v1", description = "acest server")),
@@ -33,6 +34,7 @@ use crate::auth::{self, RateKey};
     tags(
         (name = "cautare", description = "Căutare după stradă și filtre"),
         (name = "sedinte", description = "Ședințele comisiei și proiectele lor"),
+        (name = "certificate", description = "Certificatele de urbanism emise"),
         (name = "operare", description = "Starea serviciului")
     )
 )]
@@ -67,6 +69,7 @@ pub fn router() -> (Router, utoipa::openapi::OpenApi) {
         .routes(routes!(handlers::get_meeting))
         .routes(routes!(handlers::get_item))
         .routes(routes!(handlers::streets))
+        .routes(routes!(handlers::search_certificates))
         .routes(routes!(handlers::status))
         .split_for_parts();
 

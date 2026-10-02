@@ -1,12 +1,14 @@
-//! Componente refolosite de pagini: cardul unui proiect, rândul de agendă fără proiect, insigna de
-//! categorie, data ultimei sincronizări din antet, subsolul cu sursa.
+//! Componente refolosite de pagini: cardul unui proiect, rândul de agendă fără proiect, cardul unui
+//! certificat de urbanism, insignele de categorie și de tip, data ultimei sincronizări din antet,
+//! subsolul cu sursa.
 
 use chrono::{DateTime, NaiveDate, Utc};
 use dioxus::prelude::*;
-use urban_shared::{AgendaRowView, Category, Item};
+use urban_shared::text::normalize;
+use urban_shared::{AgendaRowView, Category, Certificate, CertificateKind, Item};
 
 use super::Route;
-use crate::query::SearchParams;
+use crate::query::{CertificateParams, SearchParams};
 use crate::server_fns;
 
 /// „16 septembrie 2026”
@@ -96,6 +98,45 @@ pub fn AgendaRowCard(row: AgendaRowView) -> Element {
             p { class: "title", "{row.description}" }
             if let Some(b) = &row.beneficiary {
                 p { class: "beneficiary", "{b}" }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn KindBadge(kind: CertificateKind) -> Element {
+    rsx! {
+        Link {
+            class: "badge badge-{kind.as_str()}",
+            to: Route::Certificates { params: CertificateParams::only_kind(kind) },
+            "{kind.label()}"
+        }
+    }
+}
+
+/// Un certificat de urbanism (FR-10.3): data emiterii, tipul, numărul cu link către primărie,
+/// adresa și scopul declarat (ascuns când e doar „informare”, adică tipul însuși).
+#[component]
+pub fn CertificateCard(cert: Certificate) -> Element {
+    let date = fmt_date(cert.date);
+    let show_scop = !cert.scop.is_empty() && normalize(&cert.scop) != "informare";
+    rsx! {
+        li { class: "item certificate",
+            div { class: "meta",
+                span { "Emis {date}" }
+                KindBadge { kind: cert.kind }
+            }
+            h3 { class: "title",
+                a { href: "{cert.url}", target: "_blank", rel: "noopener", "{cert.title()}" }
+            }
+            if let Some(a) = &cert.address {
+                p { class: "address", "{a}" }
+            }
+            if show_scop {
+                p { class: "scop", "{cert.scop}" }
+            }
+            div { class: "docs",
+                a { class: "project-link", href: "{cert.url}", target: "_blank", rel: "noopener", "Certificatul pe site-ul primăriei ↗" }
             }
         }
     }

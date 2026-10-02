@@ -75,6 +75,8 @@ async fn run_once(state: &'static AppState, client: &Client, pdf: &Chain, mailer
             meetings_seen = rep.meetings_seen,
             meetings_updated = rep.meetings_updated,
             items_new = rep.items_new,
+            certificates_seen = rep.certificates_seen,
+            certificates_new = rep.certificates_new,
             warnings = rep.warnings.len(),
             errors = rep.errors.len(),
             secs = started.elapsed().as_secs(),

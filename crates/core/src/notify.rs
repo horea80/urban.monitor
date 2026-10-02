@@ -10,7 +10,7 @@ use chrono::Local;
 use serde::Serialize;
 use tracing::info;
 use urban_shared::time::fmt_date_ro;
-use urban_shared::{Item, Meeting};
+use urban_shared::{Certificate, Item, Meeting};
 
 use crate::alerts::Matches;
 use crate::config::{AlertConfig, Config};
@@ -201,40 +201,75 @@ fn item_line(i: &Item) -> String {
     )
 }
 
-/// Rezumatul pe cuvinte-cheie: proiectele noi, grupate pe cuvânt.
+fn certificate_line(c: &Certificate) -> String {
+    let unde = c.address.as_deref().map(|s| format!(" — {s}")).unwrap_or_default();
+    format!("{} ({}){unde}, emis {}", c.title(), c.kind.label(), fmt_date_ro(c.date))
+}
+
+/// Rezumatul pe cuvinte-cheie: proiectele și certificatele de urbanism noi, grupate pe cuvânt.
 pub fn render_digest(public_url: &str, matches: &Matches) -> (String, String, String) {
-    let total = matches.total();
-    let words: Vec<&str> = matches.keywords.iter().map(|(k, _)| k.text.as_str()).collect();
-    let subject = if total == 1 {
-        format!("Proiect nou pentru „{}”", words[0])
-    } else {
-        format!(
-            "{total} proiecte noi pentru {}",
-            words.iter().map(|w| format!("„{w}”")).collect::<Vec<_>>().join(", ")
-        )
+    let quoted = matches
+        .keywords
+        .iter()
+        .map(|k| format!("„{}”", k.keyword.text))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let subject = match (matches.total_items(), matches.total_certificates()) {
+        (1, 0) => format!("Proiect nou pentru {quoted}"),
+        (0, 1) => format!("Certificat de urbanism nou pentru {quoted}"),
+        (n, 0) => format!("{n} proiecte noi pentru {quoted}"),
+        (0, n) => format!("{n} certificate de urbanism noi pentru {quoted}"),
+        (i, c) => format!("{} noutăți pentru {quoted}", i + c),
     };
-    let mut text = String::from("Proiecte noi pe ordinea de zi CTATU care se potrivesc cuvintelor tale cheie:\n\n");
-    let mut html = String::from("<p>Proiecte noi pe ordinea de zi CTATU care se potrivesc cuvintelor tale cheie:</p>");
-    for (k, items) in &matches.keywords {
-        text.push_str(&format!("{}:\n", k.text));
-        html.push_str(&format!("<h3>{}</h3><ul>", esc(&k.text)));
-        for i in items {
-            let meeting_link = format!("{public_url}/sedinte/{}", i.meeting_id);
-            text.push_str(&format!(
-                "• {}\n  {}\n  Proiectul pe site-ul primăriei: {}\n",
-                item_line(i),
-                meeting_link,
-                i.url
-            ));
+    let mut text = String::from("Noutăți de la Primăria Cluj-Napoca care se potrivesc cuvintelor tale cheie:\n\n");
+    let mut html = String::from("<p>Noutăți de la Primăria Cluj-Napoca care se potrivesc cuvintelor tale cheie:</p>");
+    for k in &matches.keywords {
+        text.push_str(&format!("{}:\n", k.keyword.text));
+        html.push_str(&format!("<h3>{}</h3>", esc(&k.keyword.text)));
+        if !k.items.is_empty() {
+            text.push_str("Pe ordinea de zi CTATU:\n");
+            html.push_str("<p>Pe ordinea de zi CTATU:</p><ul>");
+            for i in &k.items {
+                let meeting_link = format!("{public_url}/sedinte/{}", i.meeting_id);
+                text.push_str(&format!(
+                    "• {}\n  {}\n  Proiectul pe site-ul primăriei: {}\n",
+                    item_line(i),
+                    meeting_link,
+                    i.url
+                ));
+                html.push_str(&format!(
+                    "<li>{}<br><a href=\"{}\">Ședința</a> · <a href=\"{}\">Proiectul pe site-ul primăriei</a></li>",
+                    esc(&item_line(i)),
+                    esc(&meeting_link),
+                    esc(&i.url)
+                ));
+            }
+            html.push_str("</ul>");
+        }
+        if !k.certificates.is_empty() {
+            let encoded: String = url::form_urlencoded::byte_serialize(k.keyword.text.as_bytes()).collect();
+            let site_link = format!("{public_url}/certificate?q={encoded}");
+            text.push_str("Certificate de urbanism emise:\n");
+            html.push_str("<p>Certificate de urbanism emise:</p><ul>");
+            for c in &k.certificates {
+                text.push_str(&format!(
+                    "• {}\n  Pe site-ul primăriei: {}\n",
+                    certificate_line(c),
+                    c.url
+                ));
+                html.push_str(&format!(
+                    "<li>{}<br><a href=\"{}\">Pe site-ul primăriei</a></li>",
+                    esc(&certificate_line(c)),
+                    esc(&c.url)
+                ));
+            }
+            text.push_str(&format!("  Toate certificatele pentru acest cuvânt: {site_link}\n"));
             html.push_str(&format!(
-                "<li>{}<br><a href=\"{}\">Ședința</a> · <a href=\"{}\">Proiectul pe site-ul primăriei</a></li>",
-                esc(&item_line(i)),
-                esc(&meeting_link),
-                esc(&i.url)
+                "</ul><p><a href=\"{}\">Toate certificatele pentru acest cuvânt</a></p>",
+                esc(&site_link)
             ));
         }
         text.push('\n');
-        html.push_str("</ul>");
     }
     text.push_str(&format!(
         "Cuvintele-cheie le schimbi din contul tău: {public_url}/cont\nTrimis de Monitor Urban, care urmărește site-ul primăriei."
@@ -256,10 +291,11 @@ fn esc(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use chrono::NaiveDate;
-    use urban_shared::Category;
+    use urban_shared::{Category, CertificateKind};
 
     use super::*;
     use crate::accounts::Keyword;
+    use crate::alerts::KeywordMatches;
 
     fn meeting(id: i64, day: u32, time: Option<&str>, items: i64) -> Meeting {
         Meeting {
@@ -322,12 +358,55 @@ mod tests {
             normalized: "fabricii".into(),
         };
         let m = Matches {
-            keywords: vec![(kw, vec![item])],
+            keywords: vec![KeywordMatches {
+                keyword: kw.clone(),
+                items: vec![item.clone()],
+                certificates: vec![],
+            }],
         };
         let (subject, text, html) = render_digest("https://x.ro", &m);
         assert_eq!(subject, "Proiect nou pentru „Fabricii”");
         assert!(text.contains("PUZ str. Fabricii nr. 3 (PUZ) — str. Fabricii nr. 3, ședința din 7 octombrie 2026"));
         assert!(text.contains("https://x.ro/sedinte/9"));
         assert!(html.contains("<h3>Fabricii</h3>"));
+        assert!(!text.contains("Certificate de urbanism"));
+
+        // un certificat și un proiect pe același cuvânt
+        let cert = Certificate {
+            id: 3,
+            url: "https://p/cu-1733".into(),
+            number: 1733,
+            year: 2026,
+            date: NaiveDate::from_ymd_opt(2026, 10, 1).unwrap(),
+            scop: "INFORMARE".into(),
+            kind: CertificateKind::Informare,
+            address: Some("Str Fabricii, nr. 7".into()),
+            street: Some("Fabricii".into()),
+            street_no: Some("7".into()),
+        };
+        let m = Matches {
+            keywords: vec![KeywordMatches {
+                keyword: kw.clone(),
+                items: vec![item],
+                certificates: vec![cert.clone()],
+            }],
+        };
+        let (subject, text, html) = render_digest("https://x.ro", &m);
+        assert_eq!(subject, "2 noutăți pentru „Fabricii”");
+        assert!(
+            text.contains("Certificat de urbanism 1733/2026 (Informare) — Str Fabricii, nr. 7, emis 1 octombrie 2026")
+        );
+        assert!(text.contains("https://x.ro/certificate?q=Fabricii"));
+        assert!(html.contains("<a href=\"https://p/cu-1733\">"));
+
+        let m = Matches {
+            keywords: vec![KeywordMatches {
+                keyword: kw,
+                items: vec![],
+                certificates: vec![cert],
+            }],
+        };
+        let (subject, _, _) = render_digest("https://x.ro", &m);
+        assert_eq!(subject, "Certificat de urbanism nou pentru „Fabricii”");
     }
 }

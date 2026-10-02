@@ -2,7 +2,9 @@
 //! ajung aici prin cererile generate de Dioxus. Interogările SQLite rulează în `spawn_blocking`.
 
 use dioxus::prelude::*;
-use urban_shared::{AccountView, Meeting, MeetingDetail, SearchQuery, SearchResult, Status};
+use urban_shared::{
+    AccountView, CertificateQuery, CertificateResult, Meeting, MeetingDetail, SearchQuery, SearchResult, Status,
+};
 
 #[cfg(feature = "server")]
 async fn blocking<T, F>(f: F) -> ServerFnResult<T>
@@ -20,6 +22,12 @@ where
 #[server]
 pub async fn search(query: SearchQuery) -> ServerFnResult<SearchResult> {
     blocking(move |db| db.search(&query)).await
+}
+
+/// Certificatele de urbanism emise (FR-10.3).
+#[server]
+pub async fn search_certificates(query: CertificateQuery) -> ServerFnResult<CertificateResult> {
+    blocking(move |db| db.search_certificates(&query)).await
 }
 
 #[server]

@@ -1,6 +1,6 @@
 use chrono::NaiveDate;
-use urban_core::db::{AgendaRowWrite, Db, ItemWrite, MeetingWrite, RunCounts};
-use urban_core::shared::{Category, Document, SearchQuery};
+use urban_core::db::{AgendaRowWrite, CertificateWrite, Db, ItemWrite, MeetingWrite, RunCounts, fts_query};
+use urban_core::shared::{Category, CertificateKind, CertificateQuery, Document, SearchQuery};
 
 fn open() -> (tempfile::TempDir, Db) {
     let dir = tempfile::tempdir().unwrap();
@@ -204,6 +204,7 @@ fn sync_runs_are_recorded() {
             meetings_seen: 20,
             meetings_updated: 3,
             items_new: 7,
+            certificates_new: 2,
         },
         None,
     )
@@ -212,5 +213,161 @@ fn sync_runs_are_recorded() {
     assert!(run.ok);
     assert_eq!(run.meetings_seen, 20);
     assert_eq!(run.items_new, 7);
+    assert_eq!(run.certificates_new, 2);
     assert!(run.finished_at.is_some());
+}
+
+#[allow(clippy::too_many_arguments)]
+fn cert(
+    url: &str,
+    number: i64,
+    year: i32,
+    (y, m, d): (i32, u32, u32),
+    scop: &str,
+    kind: CertificateKind,
+    address: Option<&str>,
+    street: Option<&str>,
+    street_no: Option<&str>,
+) -> CertificateWrite {
+    CertificateWrite {
+        url: url.into(),
+        number,
+        year,
+        date: NaiveDate::from_ymd_opt(y, m, d).unwrap(),
+        scop: scop.into(),
+        kind,
+        address: address.map(str::to_owned),
+        street: street.map(str::to_owned),
+        street_no: street_no.map(str::to_owned),
+    }
+}
+
+#[test]
+fn certificates_write_search_and_alert_window() {
+    let (_dir, db) = open();
+    let certs = vec![
+        cert(
+            "https://x/cu-1733",
+            1733,
+            2026,
+            (2026, 10, 1),
+            "INFORMARE",
+            CertificateKind::Informare,
+            Some("CĂPITAN GRIGORE IGNAT, nr. 28"),
+            Some("CĂPITAN GRIGORE IGNAT"),
+            Some("28"),
+        ),
+        cert(
+            "https://x/cu-1731",
+            1731,
+            2026,
+            (2026, 9, 30),
+            "ELABORARE PLAN URBANISTIC ZONAL",
+            CertificateKind::Puz,
+            Some("Str Traian Vuia, nr. 246"),
+            Some("Traian Vuia"),
+            Some("246"),
+        ),
+        cert(
+            "https://x/cu-12",
+            12,
+            2024,
+            (2024, 1, 5),
+            "OPERAȚIUNI CADASTRALE",
+            CertificateKind::Operatiuni,
+            None,
+            None,
+            None,
+        ),
+    ];
+    assert_eq!(db.write_certificates(&certs).unwrap(), 3);
+    assert_eq!(
+        db.write_certificates(&certs).unwrap(),
+        0,
+        "a doua scriere nu aduce nimic nou"
+    );
+    assert_eq!(db.status().unwrap().certificates, 3);
+
+    // fără text: toate, cele mai recente întâi
+    let r = db.search_certificates(&CertificateQuery::default()).unwrap();
+    assert_eq!(r.total, 3);
+    assert_eq!(r.items[0].number, 1733);
+    assert_eq!(r.items[0].title(), "Certificat de urbanism 1733/2026");
+    assert_eq!(r.items[0].street_no.as_deref(), Some("28"));
+    assert_eq!(r.items[2].kind, CertificateKind::Operatiuni);
+
+    // prefix, fără diacritice: „capitan” găsește „CĂPITAN”
+    let r = db
+        .search_certificates(&CertificateQuery {
+            q: "capitan ignat".into(),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(r.total, 1);
+
+    // numărul certificatului e indexat
+    let r = db
+        .search_certificates(&CertificateQuery {
+            q: "1731".into(),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(r.total, 1);
+    assert_eq!(r.items[0].kind, CertificateKind::Puz);
+
+    // filtre pe tip și an, paginare
+    let r = db
+        .search_certificates(&CertificateQuery {
+            kinds: vec![CertificateKind::Operatiuni],
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(r.total, 1);
+    let r = db
+        .search_certificates(&CertificateQuery {
+            year: Some(2026),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(r.total, 2);
+    let r = db
+        .search_certificates(&CertificateQuery {
+            limit: 1,
+            offset: 1,
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(r.total, 3);
+    assert_eq!(r.items.len(), 1);
+    assert_eq!(r.items[0].number, 1731);
+
+    // alerte: văzut după `since` și emis cu cel mult 14 zile înaintea lui `since`
+    let fts = fts_query("traian vuia").unwrap();
+    assert_eq!(
+        db.new_certificates_matching(&fts, "2026-09-25T00:00:00Z")
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(
+        db.new_certificates_matching(&fts, "2999-01-01T00:00:00Z")
+            .unwrap()
+            .is_empty()
+    );
+    // certificat vechi descărcat acum (istoric): în afara ferestrei, nu alertează
+    let fts = fts_query("cadastrale").unwrap();
+    assert!(
+        db.new_certificates_matching(&fts, "2026-09-25T00:00:00Z")
+            .unwrap()
+            .is_empty()
+    );
+
+    // starea internă cu chei
+    assert_eq!(db.meta_get("certificates_backfill_year").unwrap(), None);
+    db.meta_set("certificates_backfill_year", "2024").unwrap();
+    db.meta_set("certificates_backfill_year", "2023").unwrap();
+    assert_eq!(
+        db.meta_get("certificates_backfill_year").unwrap().as_deref(),
+        Some("2023")
+    );
 }

@@ -2,7 +2,9 @@ mod common;
 
 use chrono::{Datelike, NaiveDate};
 use common::*;
-use urban_core::scrape::{first_pdf, parse_documents, parse_listing, parse_meeting};
+use urban_core::scrape::{first_pdf, parse_certificates, parse_documents, parse_listing, parse_meeting};
+use urban_core::shared::CertificateKind;
+use urban_core::shared::text::{classify_scop, parse_work_address};
 
 fn ymd(y: i32, m: u32, d: u32) -> Option<NaiveDate> {
     NaiveDate::from_ymd_opt(y, m, d)
@@ -113,4 +115,81 @@ fn announcement_page_has_no_documents() {
     let docs = parse_documents(&fixture("announcement-page-115.html"), url);
     assert!(docs.iter().all(|d| !d.url.to_lowercase().contains("anti-mita")));
     assert!(first_pdf(&docs).is_none(), "{docs:?}");
+}
+
+#[test]
+fn certificates_page_lists_24_newest_first() {
+    let url = "https://primariaclujnapoca.ro/urbanism/certificate-de-urbanism/documente-emise/";
+    let page = parse_certificates(&fixture("certificates-page-1.html"), url);
+    assert_eq!(page.certificates.len(), 24);
+    assert!(page.has_next);
+
+    let first = &page.certificates[0];
+    assert_eq!(
+        first.url,
+        "https://primariaclujnapoca.ro/urbanism/certificate-de-urbanism/certificat-de-urbanism-1733-din-2026/"
+    );
+    assert_eq!((first.number, first.year), (1733, 2026));
+    assert_eq!(first.date, ymd(2026, 10, 1).unwrap());
+    assert_eq!(first.scop, "INFORMARE");
+    assert_eq!(
+        first.address.as_deref(),
+        Some("judetul Cluj, municipiul Cluj-Napoca, CĂPITAN GRIGORE IGNAT, nr. 28")
+    );
+    let addr = parse_work_address(first.address.as_deref().unwrap());
+    assert_eq!(addr.street.as_deref(), Some("CĂPITAN GRIGORE IGNAT"));
+    assert_eq!(addr.street_no.as_deref(), Some("28"));
+
+    // al doilea nu are adresă dincolo de județ și municipiu: strada lipsește
+    let second = &page.certificates[1];
+    assert_eq!((second.number, second.year), (1732, 2026));
+    let addr = parse_work_address(second.address.as_deref().unwrap_or(""));
+    assert_eq!(addr.street, None);
+
+    // ordinea e descrescătoare după dată, numerele sunt din 2026, fără duplicate
+    assert!(page.certificates.windows(2).all(|w| w[0].date >= w[1].date));
+    assert!(
+        page.certificates
+            .iter()
+            .all(|c| c.year == 2026 && c.date.year() == 2026)
+    );
+    let mut urls: Vec<&str> = page.certificates.iter().map(|c| c.url.as_str()).collect();
+    urls.sort_unstable();
+    urls.dedup();
+    assert_eq!(urls.len(), 24);
+
+    // 10 din 24 au stradă și număr; 6 doar stradă („nr. FN”, „nr. f.nr.”, „nr. FM” înseamnă fără număr);
+    // 8 nu au nimic dincolo de județ și municipiu
+    let parsed: Vec<_> = page
+        .certificates
+        .iter()
+        .map(|c| parse_work_address(c.address.as_deref().unwrap_or("")))
+        .collect();
+    assert_eq!(
+        parsed
+            .iter()
+            .filter(|a| a.street.is_some() && a.street_no.is_some())
+            .count(),
+        10
+    );
+    assert_eq!(
+        parsed
+            .iter()
+            .filter(|a| a.street.is_some() && a.street_no.is_none())
+            .count(),
+        6
+    );
+    assert_eq!(parsed.iter().filter(|a| a.street.is_none()).count(), 8);
+    let faget = parsed
+        .iter()
+        .find(|a| a.street.as_deref() == Some("FAGET"))
+        .expect("Colonia Făget");
+    assert_eq!(faget.street_no, None);
+
+    // tipurile de pe prima pagină: informarea domină
+    let kinds: Vec<CertificateKind> = page.certificates.iter().map(|c| classify_scop(&c.scop)).collect();
+    assert_eq!(kinds.iter().filter(|k| **k == CertificateKind::Informare).count(), 15);
+    assert_eq!(kinds.iter().filter(|k| **k == CertificateKind::Construire).count(), 4);
+    assert_eq!(kinds.iter().filter(|k| **k == CertificateKind::Operatiuni).count(), 4);
+    assert_eq!(kinds.iter().filter(|k| **k == CertificateKind::Altele).count(), 1);
 }

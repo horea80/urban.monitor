@@ -1,5 +1,5 @@
-//! CLI (FR-6): `urban sync [--full]`, `urban search <text> [--tip ...] [--an ...]`, `urban meetings`, `urban status`,
-//! `urban notify [--test]`.
+//! CLI (FR-6): `urban sync [--full]`, `urban search <text> [--tip ...] [--an ...]`,
+//! `urban certificates <text> [--tip ...] [--an ...]`, `urban meetings`, `urban status`, `urban notify [--test]`.
 //! Serverul web este crate-ul `urban-app`.
 
 use clap::{Parser, Subcommand};
@@ -10,7 +10,7 @@ use urban_core::db::Db;
 use urban_core::notify::Mailer;
 use urban_core::pdf::Chain;
 use urban_core::scrape::Client;
-use urban_core::shared::{Category, SearchQuery};
+use urban_core::shared::{Category, CertificateKind, CertificateQuery, SearchQuery};
 use urban_core::sync::{self, SyncOptions};
 
 #[derive(Parser)]
@@ -40,6 +40,22 @@ enum Cmd {
         #[arg(long = "tip", value_delimiter = ',')]
         tip: Vec<Category>,
         /// Doar ședințele din anul dat
+        #[arg(long = "an")]
+        an: Option<i32>,
+        #[arg(long, default_value_t = 50)]
+        limit: u32,
+        /// Ieșire JSON în loc de tabel
+        #[arg(long)]
+        json: bool,
+    },
+    /// Caută în certificatele de urbanism emise (FR-10): stradă, număr, scop
+    Certificates {
+        /// Cuvinte de căutat; fără diacritice merge la fel
+        q: Vec<String>,
+        /// Tipuri: INFORMARE, CONSTRUIRE, PUZ, PUD, OPERATIUNI, ALTELE, separate prin virgulă
+        #[arg(long = "tip", value_delimiter = ',')]
+        tip: Vec<CertificateKind>,
+        /// Doar certificatele emise în anul dat
         #[arg(long = "an")]
         an: Option<i32>,
         #[arg(long, default_value_t = 50)]
@@ -88,10 +104,13 @@ async fn main() -> anyhow::Result<()> {
             let pdf = Chain::default_chain();
             let report = sync::run(&cfg, &client, &db, &pdf, SyncOptions { full }).await?;
             println!(
-                "ședințe în listă: {}, actualizate: {}, proiecte noi: {}, avertismente: {}, erori: {}",
+                "ședințe în listă: {}, actualizate: {}, proiecte noi: {}, certificate citite: {}, noi: {}, \
+                 avertismente: {}, erori: {}",
                 report.meetings_seen,
                 report.meetings_updated,
                 report.items_new,
+                report.certificates_seen,
+                report.certificates_new,
                 report.warnings.len(),
                 report.errors.len()
             );
@@ -160,6 +179,39 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
         }
+        Cmd::Certificates {
+            q,
+            tip,
+            an,
+            limit,
+            json,
+        } => {
+            let query = CertificateQuery {
+                q: q.join(" "),
+                kinds: tip,
+                year: an,
+                limit,
+                offset: 0,
+            };
+            let result = db.search_certificates(&query)?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&result)?);
+                return Ok(());
+            }
+            println!("{} certificate găsite", result.total);
+            for c in &result.items {
+                println!(
+                    "{}  {:<34}  {}\n{:>12}  {}\n{:>12}  {}",
+                    c.date,
+                    c.kind.label(),
+                    c.title(),
+                    "",
+                    c.address.as_deref().unwrap_or("-"),
+                    "",
+                    c.url
+                );
+            }
+        }
         Cmd::Meetings => {
             for m in db.list_meetings()? {
                 println!(
@@ -179,18 +231,20 @@ async fn main() -> anyhow::Result<()> {
         Cmd::Status => {
             let s = db.status()?;
             println!(
-                "ședințe: {}  proiecte: {}  rânduri de agendă nepotrivite: {}",
-                s.meetings, s.items, s.agenda_rows_unmatched
+                "ședințe: {}  proiecte: {}  rânduri de agendă nepotrivite: {}  certificate de urbanism: {}",
+                s.meetings, s.items, s.agenda_rows_unmatched, s.certificates
             );
             match s.last_run {
                 Some(r) => println!(
-                    "ultima sincronizare: început {}  sfârșit {}  ok={}  ședințe {}/{}  proiecte noi {}{}",
+                    "ultima sincronizare: început {}  sfârșit {}  ok={}  ședințe {}/{}  proiecte noi {}  \
+                     certificate noi {}{}",
                     r.started_at,
                     r.finished_at.as_deref().unwrap_or("în curs"),
                     r.ok,
                     r.meetings_updated,
                     r.meetings_seen,
                     r.items_new,
+                    r.certificates_new,
                     r.error
                         .as_deref()
                         .map(|e| format!("\n  eroare: {e}"))

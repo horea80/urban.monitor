@@ -13,7 +13,14 @@ use rusqlite_migration::{M, Migrations};
 
 use crate::error::Result;
 use urban_shared::text::{classify, normalize, tokens};
-use urban_shared::{AgendaRowView, Category, Document, Item, Meeting, SearchQuery, SearchResult, Status, SyncRun};
+use urban_shared::{
+    AgendaRowView, Category, Certificate, CertificateKind, CertificateQuery, CertificateResult, Document, Item,
+    Meeting, SearchQuery, SearchResult, Status, SyncRun,
+};
+
+/// FR-10.4: un certificat intră în alerte doar dacă a fost emis cu cel mult atâtea zile înaintea
+/// ultimei verificări a utilizatorului; altfel descărcarea istoricului ar alerta certificate vechi.
+pub const CERT_ALERT_WINDOW_DAYS: i64 = 14;
 
 const SCHEMA_V1: &str = r#"
 CREATE TABLE meetings (
@@ -154,8 +161,41 @@ CREATE TABLE alert_log (
 );
 "#;
 
+// FR-10: certificatele de urbanism emise (ADR-0013), contorul lor în rulări și `meta`, starea
+// internă cu chei (ex. până la ce an a fost parcurs istoricul certificatelor)
+const SCHEMA_V4: &str = r#"
+CREATE TABLE certificates (
+  id            INTEGER PRIMARY KEY,
+  url           TEXT NOT NULL UNIQUE,
+  number        INTEGER NOT NULL,
+  year          INTEGER NOT NULL,
+  date          TEXT NOT NULL,
+  scop          TEXT NOT NULL,
+  kind          TEXT NOT NULL,
+  address       TEXT,
+  street        TEXT,
+  street_no     TEXT,
+  first_seen_at TEXT NOT NULL,
+  last_seen_at  TEXT NOT NULL
+);
+CREATE INDEX certificates_date ON certificates(date);
+CREATE INDEX certificates_year_number ON certificates(year, number);
+CREATE INDEX certificates_kind ON certificates(kind);
+CREATE VIRTUAL TABLE certificates_fts USING fts5(text, cert_id UNINDEXED, tokenize='unicode61');
+ALTER TABLE sync_runs ADD COLUMN certificates_new INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE meta (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+"#;
+
 fn migrations() -> Migrations<'static> {
-    Migrations::new(vec![M::up(SCHEMA_V1), M::up(SCHEMA_V2), M::up(SCHEMA_V3)])
+    Migrations::new(vec![
+        M::up(SCHEMA_V1),
+        M::up(SCHEMA_V2),
+        M::up(SCHEMA_V3),
+        M::up(SCHEMA_V4),
+    ])
 }
 
 pub type Conn = PooledConnection<SqliteConnectionManager>;
@@ -239,6 +279,22 @@ pub struct RunCounts {
     pub meetings_seen: usize,
     pub meetings_updated: usize,
     pub items_new: usize,
+    pub certificates_new: usize,
+}
+
+/// Ce scriem pentru un certificat de urbanism (FR-10). Lista primăriei e singura sursă, deci la
+/// re-citire câmpurile se suprascriu.
+#[derive(Debug, Clone, Default)]
+pub struct CertificateWrite {
+    pub url: String,
+    pub number: i64,
+    pub year: i32,
+    pub date: NaiveDate,
+    pub scop: String,
+    pub kind: CertificateKind,
+    pub address: Option<String>,
+    pub street: Option<String>,
+    pub street_no: Option<String>,
 }
 
 pub fn now_iso() -> String {
@@ -340,6 +396,25 @@ fn row_to_sync_run(r: &Row<'_>) -> rusqlite::Result<SyncRun> {
         meetings_updated: r.get(5)?,
         items_new: r.get(6)?,
         error: r.get(7)?,
+        certificates_new: r.get(8)?,
+    })
+}
+
+const CERT_SELECT: &str = "SELECT c.id, c.url, c.number, c.year, c.date, c.scop, c.kind, c.address, c.street, c.street_no \
+     FROM certificates c";
+
+fn row_to_certificate(r: &Row<'_>) -> rusqlite::Result<Certificate> {
+    Ok(Certificate {
+        id: r.get(0)?,
+        url: r.get(1)?,
+        number: r.get(2)?,
+        year: r.get(3)?,
+        date: parse_date(&r.get::<_, String>(4)?),
+        scop: r.get(5)?,
+        kind: r.get::<_, String>(6)?.parse().unwrap_or_default(),
+        address: r.get(7)?,
+        street: r.get(8)?,
+        street_no: r.get(9)?,
     })
 }
 
@@ -371,15 +446,25 @@ impl Filters {
         }
     }
 
-    fn categories(&mut self, col: &str, cats: &[Category]) {
-        if cats.is_empty() {
+    fn one_of(&mut self, col: &str, values: &[&str]) {
+        if values.is_empty() {
             return;
         }
-        let ph: Vec<String> = cats
+        let ph: Vec<String> = values
             .iter()
-            .map(|c| format!("?{}", self.push_arg(Value::Text(c.as_str().to_owned()))))
+            .map(|v| format!("?{}", self.push_arg(Value::Text((*v).to_owned()))))
             .collect();
         self.clauses.push(format!("{col} IN ({})", ph.join(",")));
+    }
+
+    fn categories(&mut self, col: &str, cats: &[Category]) {
+        let values: Vec<&str> = cats.iter().map(|c| c.as_str()).collect();
+        self.one_of(col, &values);
+    }
+
+    fn kinds(&mut self, col: &str, kinds: &[CertificateKind]) {
+        let values: Vec<&str> = kinds.iter().map(|k| k.as_str()).collect();
+        self.one_of(col, &values);
     }
 
     fn year(&mut self, col: &str, year: Option<i32>) {
@@ -628,7 +713,7 @@ impl Db {
         let conn = self.conn()?;
         conn.execute(
             "UPDATE sync_runs SET finished_at = ?2, ok = ?3, meetings_seen = ?4, meetings_updated = ?5, \
-                                  items_new = ?6, error = ?7 WHERE id = ?1",
+                                  items_new = ?6, error = ?7, certificates_new = ?8 WHERE id = ?1",
             params![
                 id,
                 now_iso(),
@@ -636,8 +721,134 @@ impl Db {
                 counts.meetings_seen as i64,
                 counts.meetings_updated as i64,
                 counts.items_new as i64,
-                error
+                error,
+                counts.certificates_new as i64
             ],
+        )?;
+        Ok(())
+    }
+
+    // ---- certificate de urbanism (FR-10) ----
+
+    /// Scrie o pagină de certificate într-o tranzacție, idempotent pe URL; întoarce câte erau noi.
+    pub fn write_certificates(&self, certs: &[CertificateWrite]) -> Result<usize> {
+        let mut conn = self.conn()?;
+        let tx = conn.transaction()?;
+        let now = now_iso();
+        let mut new = 0;
+        for c in certs {
+            let existed = tx
+                .query_row("SELECT 1 FROM certificates WHERE url = ?1", params![c.url], |_| Ok(()))
+                .optional()?
+                .is_some();
+            let id: i64 = tx.query_row(
+                "INSERT INTO certificates (url, number, year, date, scop, kind, address, street, street_no, \
+                                           first_seen_at, last_seen_at) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10) \
+                 ON CONFLICT(url) DO UPDATE SET \
+                   number = excluded.number, \
+                   year = excluded.year, \
+                   date = excluded.date, \
+                   scop = excluded.scop, \
+                   kind = excluded.kind, \
+                   address = excluded.address, \
+                   street = excluded.street, \
+                   street_no = excluded.street_no, \
+                   last_seen_at = excluded.last_seen_at \
+                 RETURNING id",
+                params![
+                    c.url,
+                    c.number,
+                    c.year,
+                    c.date.to_string(),
+                    c.scop,
+                    c.kind.as_str(),
+                    c.address,
+                    c.street,
+                    c.street_no,
+                    now
+                ],
+                |r| r.get(0),
+            )?;
+            if !existed {
+                new += 1;
+            }
+            let nr = format!("{}/{}", c.number, c.year);
+            let text = fts_text([
+                Some(nr.as_str()),
+                Some(c.scop.as_str()),
+                c.address.as_deref(),
+                c.street.as_deref(),
+                c.street_no.as_deref(),
+            ]);
+            tx.execute("DELETE FROM certificates_fts WHERE cert_id = ?1", params![id])?;
+            tx.execute(
+                "INSERT INTO certificates_fts (cert_id, text) VALUES (?1, ?2)",
+                params![id, text],
+            )?;
+        }
+        tx.commit()?;
+        Ok(new)
+    }
+
+    pub fn search_certificates(&self, q: &CertificateQuery) -> Result<CertificateResult> {
+        let conn = self.conn()?;
+        let fts = fts_query(&q.q);
+
+        let mut f = Filters::new();
+        f.fts("c.id", "certificates_fts", "cert_id", fts.as_deref());
+        f.kinds("c.kind", &q.kinds);
+        f.year("c.date", q.year);
+        let where_sql = f.sql();
+
+        let total: i64 = conn.query_row(
+            &format!("SELECT COUNT(*) FROM certificates c WHERE {where_sql}"),
+            params_from_iter(f.args.iter()),
+            |r| r.get(0),
+        )?;
+        let sql = format!(
+            "{CERT_SELECT} WHERE {where_sql} ORDER BY c.date DESC, c.year DESC, c.number DESC LIMIT {} OFFSET {}",
+            q.clamped_limit(),
+            q.offset
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let items = stmt
+            .query_map(params_from_iter(f.args.iter()), row_to_certificate)?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(CertificateResult {
+            total: total as u32,
+            items,
+        })
+    }
+
+    /// Certificatele văzute prima dată după `since` (ISO), emise cu cel mult `CERT_ALERT_WINDOW_DAYS`
+    /// zile înaintea acelui moment, care se potrivesc interogării FTS (FR-10.4).
+    pub fn new_certificates_matching(&self, fts: &str, since: &str) -> Result<Vec<Certificate>> {
+        let conn = self.conn()?;
+        let sql = format!(
+            "{CERT_SELECT} WHERE c.first_seen_at > ?1 \
+             AND c.date >= date(substr(?1, 1, 10), '-{CERT_ALERT_WINDOW_DAYS} days') \
+             AND c.id IN (SELECT cert_id FROM certificates_fts WHERE certificates_fts MATCH ?2) \
+             ORDER BY c.date DESC, c.number DESC LIMIT 200"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        Ok(stmt
+            .query_map(params![since, fts], row_to_certificate)?
+            .collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Stare internă cu chei, ex. până la ce an a fost parcurs istoricul certificatelor.
+    pub fn meta_get(&self, key: &str) -> Result<Option<String>> {
+        let conn = self.conn()?;
+        Ok(conn
+            .query_row("SELECT value FROM meta WHERE key = ?1", params![key], |r| r.get(0))
+            .optional()?)
+    }
+
+    pub fn meta_set(&self, key: &str, value: &str) -> Result<()> {
+        self.conn()?.execute(
+            "INSERT INTO meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![key, value],
         )?;
         Ok(())
     }
@@ -794,15 +1005,17 @@ impl Db {
 
     pub fn status(&self) -> Result<Status> {
         let conn = self.conn()?;
-        let (meetings, items, unmatched): (i64, i64, i64) = conn.query_row(
+        let (meetings, items, unmatched, certificates): (i64, i64, i64, i64) = conn.query_row(
             "SELECT (SELECT COUNT(*) FROM meetings), (SELECT COUNT(*) FROM items), \
-                    (SELECT COUNT(*) FROM agenda_rows WHERE item_id IS NULL)",
+                    (SELECT COUNT(*) FROM agenda_rows WHERE item_id IS NULL), \
+                    (SELECT COUNT(*) FROM certificates)",
             [],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
         )?;
         let last_run = conn
             .query_row(
-                "SELECT id, started_at, finished_at, ok, meetings_seen, meetings_updated, items_new, error \
+                "SELECT id, started_at, finished_at, ok, meetings_seen, meetings_updated, items_new, error, \
+                        certificates_new \
                  FROM sync_runs ORDER BY id DESC LIMIT 1",
                 [],
                 row_to_sync_run,
@@ -812,6 +1025,7 @@ impl Db {
             meetings,
             items,
             agenda_rows_unmatched: unmatched,
+            certificates,
             last_run,
         })
     }

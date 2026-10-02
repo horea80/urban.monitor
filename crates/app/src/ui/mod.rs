@@ -3,9 +3,10 @@
 
 use dioxus::prelude::*;
 
-use crate::query::{AccountParams, SearchParams};
+use crate::query::{AccountParams, CertificateParams, SearchParams};
 
 mod account;
+mod certificates;
 mod components;
 mod home;
 mod meeting;
@@ -13,6 +14,7 @@ mod meetings;
 mod privacy;
 
 use account::Account;
+use certificates::Certificates;
 use components::{Footer, LastUpdate};
 use home::Home;
 use meeting::MeetingPage;
@@ -29,6 +31,8 @@ pub enum Route {
         Meetings {},
         #[route("/sedinte/:id")]
         MeetingPage { id: i64 },
+        #[route("/certificate?:..params")]
+        Certificates { params: CertificateParams },
         #[route("/cont?:..params")]
         Account { params: AccountParams },
         #[route("/confidentialitate")]
@@ -56,11 +60,12 @@ fn Shell() -> Element {
             div { class: "inner",
                 Link { class: "brand", to: Route::Home { params: SearchParams::default() }, "Monitor Urban" }
                 span { class: "tagline",
-                    "Ședințele Comisiei Tehnice de Urbanism (CTATU) Cluj-Napoca, căutare după stradă, beneficiar, titlu"
+                    "Ședințele Comisiei Tehnice de Urbanism (CTATU) și certificatele de urbanism din Cluj-Napoca, căutare după stradă"
                 }
                 nav {
                     Link { to: Route::Home { params: SearchParams::default() }, active_class: "active", "Căutare" }
                     Link { to: Route::Meetings {}, active_class: "active", "Ședințe" }
+                    Link { to: Route::Certificates { params: CertificateParams::default() }, active_class: "active", "Certificate" }
                     Link { to: Route::Account { params: AccountParams::default() }, active_class: "active", "Alerte" }
                 }
                 LastUpdate {}

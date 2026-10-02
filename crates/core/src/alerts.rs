@@ -1,14 +1,14 @@
-//! Alertele pe cuvinte-cheie (FR-9): după fiecare sincronizare, pentru fiecare utilizator cu
-//! cuvinte-cheie, proiectele apărute de la ultima verificare (`first_seen_at` după
-//! `alerts_checked_until`) se caută cu aceeași interogare FTS ca pe site; potrivirile pleacă
-//! într-un singur email pe utilizator, apoi fereastra avansează. Dacă emailul nu pleacă,
-//! fereastra nu avansează și se reîncearcă la sincronizarea următoare. Alertele nu costă credite:
-//! creditul s-a plătit la adăugarea cuvântului.
+//! Alertele pe cuvinte-cheie (FR-9, FR-10.4): după fiecare sincronizare, pentru fiecare utilizator
+//! cu cuvinte-cheie, proiectele și certificatele de urbanism apărute de la ultima verificare
+//! (`first_seen_at` după `alerts_checked_until`) se caută cu aceeași interogare FTS ca pe site;
+//! potrivirile pleacă într-un singur email pe utilizator, apoi fereastra avansează. Dacă emailul
+//! nu pleacă, fereastra nu avansează și se reîncearcă la sincronizarea următoare. Alertele nu costă
+//! credite: creditul s-a plătit la adăugarea cuvântului.
 
 use std::collections::HashSet;
 
 use tracing::{info, warn};
-use urban_shared::Item;
+use urban_shared::{Certificate, Item};
 
 use crate::Result;
 use crate::accounts::Keyword;
@@ -23,21 +23,37 @@ pub struct AlertStats {
     pub errors: usize,
 }
 
-/// Potrivirile unui utilizator într-o fereastră: per cuvânt-cheie, proiectele noi (fără dubluri).
+/// Noutățile prinse de un cuvânt-cheie: proiecte de pe ordinea de zi și certificate de urbanism.
+pub struct KeywordMatches {
+    pub keyword: Keyword,
+    pub items: Vec<Item>,
+    pub certificates: Vec<Certificate>,
+}
+
+/// Potrivirile unui utilizator într-o fereastră, per cuvânt-cheie, fără dubluri.
 pub struct Matches {
-    pub keywords: Vec<(Keyword, Vec<Item>)>,
+    pub keywords: Vec<KeywordMatches>,
 }
 
 impl Matches {
     pub fn total(&self) -> usize {
-        self.keywords.iter().map(|(_, items)| items.len()).sum()
+        self.total_items() + self.total_certificates()
+    }
+
+    pub fn total_items(&self) -> usize {
+        self.keywords.iter().map(|k| k.items.len()).sum()
+    }
+
+    pub fn total_certificates(&self) -> usize {
+        self.keywords.iter().map(|k| k.certificates.len()).sum()
     }
 }
 
-/// Proiectele noi de după `since` care se potrivesc cuvintelor date; un proiect apare o singură dată,
-/// la primul cuvânt care îl prinde.
+/// Proiectele și certificatele noi de după `since` care se potrivesc cuvintelor date; fiecare apare
+/// o singură dată, la primul cuvânt care îl prinde.
 pub fn find_matches(db: &Db, keywords: &[Keyword], since: &str) -> Result<Matches> {
-    let mut seen: HashSet<i64> = HashSet::new();
+    let mut seen_items: HashSet<i64> = HashSet::new();
+    let mut seen_certs: HashSet<i64> = HashSet::new();
     let mut out = Vec::new();
     for k in keywords {
         let Some(fts) = fts_query(&k.normalized) else {
@@ -46,10 +62,19 @@ pub fn find_matches(db: &Db, keywords: &[Keyword], since: &str) -> Result<Matche
         let items: Vec<Item> = db
             .new_items_matching(&fts, since)?
             .into_iter()
-            .filter(|i| seen.insert(i.id))
+            .filter(|i| seen_items.insert(i.id))
             .collect();
-        if !items.is_empty() {
-            out.push((k.clone(), items));
+        let certificates: Vec<Certificate> = db
+            .new_certificates_matching(&fts, since)?
+            .into_iter()
+            .filter(|c| seen_certs.insert(c.id))
+            .collect();
+        if !items.is_empty() || !certificates.is_empty() {
+            out.push(KeywordMatches {
+                keyword: k.clone(),
+                items,
+                certificates,
+            });
         }
     }
     Ok(Matches { keywords: out })

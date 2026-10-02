@@ -147,6 +147,31 @@ Sursa unică de date: pagina publică
 - FR-9.4 Pagina contului arată creditele rămase, data reînnoirii și cuvintele; toate acțiunile merg și fără wasm.
   Pagina de confidențialitate spune ce se stochează și de ce.
 
+### FR-10 Certificate de urbanism
+
+*Ca locuitor, vreau să aflu de certificatele de urbanism emise pentru strada mea: ele preced autorizațiile de
+construire și documentațiile PUZ/PUD, deci sunt semnalul cel mai timpuriu.*
+
+- FR-10.1 Când rulează o sincronizare, sistemul trebuie să citească lista certificatelor de urbanism emise
+  (<https://primariaclujnapoca.ro/urbanism/certificate-de-urbanism/documente-emise/>), pagină cu pagină, și să
+  rețină fiecare certificat emis în anul ≥ anul de start configurat (implicit 2024) cu: URL, număr, an, data
+  emiterii, scopul declarat, adresa lucrării și, extrase din ea, strada și numărul stradal. Pagina de detaliu a
+  certificatului NU se descarcă în v1 ([ADR-0013](../adr/0013-certificate-de-urbanism-din-lista-html.md)).
+- FR-10.2 Sistemul trebuie să atribuie fiecărui certificat exact un tip, derivat din scop: `INFORMARE`,
+  `CONSTRUIRE` (lucrări de autorizat: construire, desființare, reabilitare, intrare în legalitate), `PUZ`, `PUD`,
+  `OPERATIUNI` (notariale, cadastrale), `ALTELE`. Scopul brut se păstrează. PUZ/PUD doar când sunt cerute, nu când
+  scopul se referă la un PUZ aprobat („conform PUZ…”).
+- FR-10.3 Certificatele sunt căutabile pe site (`/certificate`), în API (`/api/v1/certificates`) și din CLI
+  (`urban certificates`), cu aceeași potrivire ca FR-3 (început de cuvânt, fără diacritice) pe număr, scop, adresă
+  și stradă, filtrate după tip și an. Rezultatul arată data emiterii, tipul, numărul cu link către pagina
+  primăriei, adresa și scopul.
+- FR-10.4 Certificatele intră în alertele pe cuvinte-cheie (FR-9.2), în același email cu proiectele, grupate
+  separat. Un certificat se alertează doar dacă a fost emis cu cel mult 14 zile înaintea ultimei verificări a
+  utilizatorului, ca descărcarea istoricului să nu alerteze certificate vechi.
+- FR-10.5 Prima sincronizare (sau una completă, sau după coborârea anului de start) parcurge istoricul până la
+  anul de start și notează asta în bază; apoi fiecare sincronizare citește paginile de la început până la prima
+  fără certificate noi. O parcurgere a istoricului întreruptă se reia de la capăt la rularea următoare.
+
 ## 4. Cerințe nefuncționale
 
 - **NFR-1 Politețe față de sursă.** Cel mult o cerere pe secundă către site-ul primăriei,

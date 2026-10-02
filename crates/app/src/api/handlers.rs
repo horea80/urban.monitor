@@ -9,7 +9,10 @@ use chrono::SecondsFormat;
 use serde::{Deserialize, Serialize};
 use tracing::error;
 use urban_core::db::Db;
-use urban_shared::{Category, Item, Meeting, MeetingDetail, SearchQuery, SearchResult, Status, StreetCount};
+use urban_shared::{
+    Category, CertificateKind, CertificateQuery, CertificateResult, Item, Meeting, MeetingDetail, SearchQuery,
+    SearchResult, Status, StreetCount,
+};
 use utoipa::{IntoParams, ToSchema};
 
 use crate::auth::Caller;
@@ -120,6 +123,58 @@ pub async fn search(_caller: Caller, Query(a): Query<SearchArgs>) -> ApiResult<J
         offset: a.offset.unwrap_or(0),
     };
     Ok(Json(blocking(move |db| db.search(&query)).await?))
+}
+
+/// Parametrii căutării în certificatele de urbanism (FR-10.3).
+#[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct CertificateArgs {
+    /// Text liber: stradă, număr, cuvinte din scop. Fără diacritice merge la fel;
+    /// fiecare cuvânt se potrivește pe început de cuvânt.
+    pub q: Option<String>,
+    /// Tipuri separate prin virgulă: `INFORMARE,CONSTRUIRE,PUZ,PUD,OPERATIUNI,ALTELE`.
+    pub tip: Option<String>,
+    /// Doar certificatele emise în anul dat.
+    pub an: Option<i32>,
+    /// Câte certificate, implicit 50, maxim 200.
+    pub limit: Option<u32>,
+    /// De la ce poziție, pentru paginare.
+    pub offset: Option<u32>,
+}
+
+#[utoipa::path(
+    get,
+    path = "/certificates",
+    tag = "certificate",
+    params(CertificateArgs),
+    responses(
+        (status = 200, description = "Certificatele de urbanism potrivite, cele mai recente întâi", body = CertificateResult),
+        (status = 400, description = "Parametri invalizi", body = ApiError)
+    )
+)]
+pub async fn search_certificates(
+    _caller: Caller,
+    Query(a): Query<CertificateArgs>,
+) -> ApiResult<Json<CertificateResult>> {
+    let mut kinds = Vec::new();
+    for t in a
+        .tip
+        .as_deref()
+        .unwrap_or("")
+        .split(',')
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+    {
+        kinds.push(t.parse::<CertificateKind>().map_err(ApiError::bad_request)?);
+    }
+    let query = CertificateQuery {
+        q: a.q.unwrap_or_default(),
+        kinds,
+        year: a.an,
+        limit: a.limit.unwrap_or_else(SearchQuery::default_limit),
+        offset: a.offset.unwrap_or(0),
+    };
+    Ok(Json(blocking(move |db| db.search_certificates(&query)).await?))
 }
 
 #[utoipa::path(

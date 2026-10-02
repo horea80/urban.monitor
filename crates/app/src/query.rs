@@ -1,10 +1,11 @@
 //! Starea căutării în query string (FR-4.1): `?q=brancusi&tip=PUZ,PUD&an=2026&de_la=50`.
 //! Același tip e ruta paginii principale, e parsat din formularul clasic (fără wasm) și e
-//! transformat în `SearchQuery` pentru bibliotecă.
+//! transformat în `SearchQuery` pentru bibliotecă. `CertificateParams` face același lucru pentru
+//! pagina certificatelor de urbanism (FR-10.3).
 
 use std::fmt;
 
-use urban_shared::{Category, SearchQuery};
+use urban_shared::{Category, CertificateKind, CertificateQuery, SearchQuery};
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SearchParams {
@@ -133,6 +134,111 @@ mod tests {
         assert_eq!(s, "q=C%C3%A2mpului+12&tip=PUD");
         assert_eq!(SearchParams::from(s.as_str()), p);
         assert_eq!(SearchParams::default().to_string(), "");
+    }
+}
+
+/// Starea căutării în certificate (FR-10.3): `?q=fabricii&tip=INFORMARE,PUZ&an=2026&de_la=50`.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct CertificateParams {
+    pub q: String,
+    pub tip: Vec<CertificateKind>,
+    pub an: Option<i32>,
+    /// Decalajul paginii („de la”), multiplu de `PAGE`.
+    pub offset: u32,
+}
+
+impl CertificateParams {
+    pub const PAGE: u32 = 50;
+
+    /// Fără text și fără filtre: pagina arată cele mai recente certificate.
+    pub fn is_blank(&self) -> bool {
+        self.q.trim().is_empty() && self.tip.is_empty() && self.an.is_none()
+    }
+
+    pub fn has_kind(&self, k: CertificateKind) -> bool {
+        self.tip.contains(&k)
+    }
+
+    pub fn with_offset(&self, offset: u32) -> Self {
+        CertificateParams { offset, ..self.clone() }
+    }
+
+    pub fn only_kind(k: CertificateKind) -> Self {
+        CertificateParams {
+            tip: vec![k],
+            ..Default::default()
+        }
+    }
+
+    pub fn to_query(&self) -> CertificateQuery {
+        CertificateQuery {
+            q: self.q.trim().to_owned(),
+            kinds: self.tip.clone(),
+            year: self.an,
+            limit: Self::PAGE,
+            offset: self.offset,
+        }
+    }
+}
+
+impl From<&str> for CertificateParams {
+    /// Acceptă și `tip=PUZ&tip=PUD` (formularul clasic), și `tip=PUZ,PUD` (linkuri).
+    fn from(qs: &str) -> Self {
+        let mut p = CertificateParams::default();
+        for (k, v) in form_urlencoded::parse(qs.trim_start_matches('?').as_bytes()) {
+            match &*k {
+                "q" => p.q = v.trim().to_owned(),
+                "tip" => p
+                    .tip
+                    .extend(v.split(',').filter_map(|t| t.trim().parse::<CertificateKind>().ok())),
+                "an" => p.an = v.trim().parse().ok(),
+                "de_la" | "offset" => p.offset = v.trim().parse().unwrap_or(0),
+                _ => {}
+            }
+        }
+        p.tip = CertificateKind::ALL.into_iter().filter(|k| p.tip.contains(k)).collect();
+        p
+    }
+}
+
+impl fmt::Display for CertificateParams {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut parts: Vec<String> = Vec::new();
+        let q = self.q.trim();
+        if !q.is_empty() {
+            let encoded: String = form_urlencoded::byte_serialize(q.as_bytes()).collect();
+            parts.push(format!("q={encoded}"));
+        }
+        if !self.tip.is_empty() {
+            let tips: Vec<&str> = self.tip.iter().map(|k| k.as_str()).collect();
+            parts.push(format!("tip={}", tips.join(",")));
+        }
+        if let Some(an) = self.an {
+            parts.push(format!("an={an}"));
+        }
+        if self.offset > 0 {
+            parts.push(format!("de_la={}", self.offset));
+        }
+        f.write_str(&parts.join("&"))
+    }
+}
+
+#[cfg(test)]
+mod certificate_tests {
+    use super::*;
+
+    #[test]
+    fn parses_and_roundtrips() {
+        let p = CertificateParams::from("q=fabricii+7&tip=PUZ&tip=INFORMARE&an=2025&de_la=50");
+        assert_eq!(p.q, "fabricii 7");
+        assert_eq!(p.tip, vec![CertificateKind::Informare, CertificateKind::Puz]);
+        assert_eq!(p.an, Some(2025));
+        assert_eq!(p.offset, 50);
+        let s = p.to_string();
+        assert_eq!(s, "q=fabricii+7&tip=INFORMARE,PUZ&an=2025&de_la=50");
+        assert_eq!(CertificateParams::from(s.as_str()), p);
+        assert_eq!(CertificateParams::default().to_string(), "");
+        assert!(CertificateParams::from("?tip=xyz").is_blank());
     }
 }
 

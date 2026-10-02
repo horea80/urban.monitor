@@ -154,6 +154,15 @@ Registrul de decizii este [docs/adr/](../adr/README.md), în format MADR.
   `pdf-extract` lipește uneori tokenii vecini („10739800/24.08.2026Marian Ramona”): numărul
   de înregistrare are 6 cifre, iar numărul de ordine se validează ca precedentul plus unu.
 - **Concluziile**: PDF scanat, fără text.
+- **Certificatele de urbanism** (observat 2026-10-02): arhivă WordPress paginată prin `?sf_paged=N`, 24 pe
+  pagină, cele mai noi întâi; paginile adânci răspund în 10–17 s. `article.type-certificat_urbanism` cu
+  `h2.entry-title a` („Certificat de urbanism 1733/2026”, link), `div.date-label` („22 septembrie 2026”, data
+  emiterii, după care e sortată lista; `span.updated` e ultima modificare, uneori mai târzie),
+  `div.field-scop` (text liber, cu variante: „INFORMARE”, „informare”, „INFOMARE”, descrieri lungi),
+  `div.field-adresa_lucrare` („judetul Cluj, municipiul Cluj-Napoca, Strada X, nr. 28”; cam o treime se opresc
+  la municipiu, „nr. FN” înseamnă fără număr). API-ul REST (`/wp-json/wp/v2/certificate-de-urbanism`) numără
+  58 071 certificate din 2013 (2 802 în 2024, 2 791 în 2025), dar nu expune scopul și adresa. Pagina de
+  detaliu adaugă CF, nr. cadastral, cererea, regimul juridic/economic/tehnic; nu se descarcă în v1.
 
 Fixture-uri: `crates/core/tests/fixtures/`.
 
@@ -168,7 +177,11 @@ documents(id, item_id → items, label, url, UNIQUE(item_id, url))
 agenda_rows(id, meeting_id → meetings, nr, reg_number, reg_date, beneficiary,
             description, revenire, item_id → items NULL)
 items_fts  -- FTS5, content=items: title, address, street, beneficiary, agenda_description (normalizate)
-sync_runs(id, started_at, finished_at, ok, meetings_seen, items_new, error)
+sync_runs(id, started_at, finished_at, ok, meetings_seen, items_new, error, certificates_new)
+-- certificate de urbanism (FR-10, ADR-0013)
+certificates(id, url UNIQUE, number, year, date, scop, kind, address, street, street_no, first_seen_at, last_seen_at)
+certificates_fts  -- FTS5: număr/an, scop, adresă, stradă, număr stradal (normalizate)
+meta(key PK, value)  -- stare internă: `certificates_backfill_year`, anul până la care s-a parcurs istoricul
 -- conturi (FR-9, ADR-0012); jetoanele doar ca hash SHA-256
 users(id, email UNIQUE, plan, credits_available, credits_used, cycle_start_at, cycle_end_at,
       alerts_checked_until, consent_at, created_at, last_login_at)
